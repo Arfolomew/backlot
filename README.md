@@ -51,7 +51,7 @@ All models are open weights. No partner nodes, no closed APIs. Full list with do
 ## Setup
 
 ```bash
-git clone https://github.com/<you>/backlot
+git clone https://github.com/Arfolomew/backlot
 cd backlot
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 

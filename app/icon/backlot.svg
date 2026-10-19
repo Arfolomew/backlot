@@ -1,0 +1,8 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- Backlot: dark plate, bold orange B. The B is drawn as stroked paths rather
+       than text so it never depends on a font being installed. -->
+  <rect width="100" height="100" rx="22" fill="#15171c"/>
+  <path d="M 31 22 L 31 78" fill="none" stroke="#f26b2b" stroke-width="12" stroke-linecap="butt"/>
+  <path d="M 25 22 L 54 22 A 13 13 0 0 1 54 48 L 31 48" fill="none" stroke="#f26b2b" stroke-width="12" stroke-linejoin="round"/>
+  <path d="M 31 48 L 57 48 A 15 15 0 0 1 57 78 L 25 78" fill="none" stroke="#f26b2b" stroke-width="12" stroke-linejoin="round"/>
+</svg>

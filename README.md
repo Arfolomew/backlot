@@ -82,6 +82,18 @@ Then:
 
 If your ComfyUI is somewhere else: `COMFYUI_URL=http://127.0.0.1:8189 ./start.sh`.
 
+### Desktop icon (optional)
+
+```bash
+setup/install-launcher.sh            # app menu + desktop icon (Linux), Backlot.command on the Desktop (macOS)
+setup/install-launcher.sh --remove   # undo
+```
+
+Anything `start.sh` reads from the environment can be baked in, e.g.
+`PORT=8802 COMFYUI_URL=http://127.0.0.1:8189 setup/install-launcher.sh`. If the icon cannot
+start Backlot (usually because ComfyUI is not running) you get a desktop notification pointing at
+`launch.log` instead of a silent failure.
+
 ## Configuration
 
 Everything is an environment variable; `start.sh` sets the first two for you.

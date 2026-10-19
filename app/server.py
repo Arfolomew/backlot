@@ -131,6 +131,32 @@ def seedvr2_nodes(image_ref, short_side, first_id=50):
     }, [c, 0]
 
 HEARTBEAT = {"last": time.time(), "seen": False}
+ACTIVE_JOBS = {"n": 0}          # renders in flight; the watchdog never frees under one
+IDLE_FREE_AFTER = 20.0          # seconds without a heartbeat before the card is handed back
+CLOSE_GRACE = 8.0               # a pagehide beacon shortens the wait to this
+
+
+def _idle_watchdog():
+    """Hand the GPU back when every Backlot window is gone.
+    Each open window heartbeats every 5 s. When the beats stop (window closed, or a
+    pagehide beacon pulled the clock forward) and nothing is rendering, drop the
+    resident models once. A reload re-arms it within a second, so refreshing never
+    unloads anything. The app and proxy keep running; ComfyUI is never stopped."""
+    while True:
+        time.sleep(2.0)
+        try:
+            if not HEARTBEAT["seen"] or ACTIVE_JOBS["n"]:
+                continue
+            if time.time() - HEARTBEAT["last"] < IDLE_FREE_AFTER:
+                continue
+            HEARTBEAT["seen"] = False
+            vlo_free()
+            freed = comfy_free()
+            if freed is not None:
+                print(f"[idle] no Backlot window for {IDLE_FREE_AFTER:.0f}s, "
+                      f"freed {freed} MiB of VRAM (now {gpu_used_mib()} MiB used)", flush=True)
+        except Exception as e:
+            print(f"[idle] free failed: {e}", flush=True)
 
 
 # ---------- backend helpers (all rendering goes through the Comfy SDK) ----------
@@ -171,7 +197,11 @@ def submit_and_wait(wf, timeout=1800, exts=(".mp4", ".webm", ".gif"), base=None,
     """Submit a graph through the Comfy SDK and wait for it.
     Returns (bytes, ext, None); the third slot is kept for call-site compatibility."""
     be = backend or BACKEND
-    blob, ext = be.run(wf, timeout=timeout, exts=exts)
+    ACTIVE_JOBS["n"] += 1
+    try:
+        blob, ext = be.run(wf, timeout=timeout, exts=exts)
+    finally:
+        ACTIVE_JOBS["n"] -= 1
     return blob, ext, None
 
 
@@ -259,7 +289,11 @@ class H(BaseHTTPRequestHandler):
             HEARTBEAT["seen"] = True
             return self._send(200, json.dumps({"ok": True}))
         if p.path == "/api/status":
-            return self._send(200, json.dumps({"comfy": comfy_alive()}))
+            return self._send(200, json.dumps({
+                "comfy": comfy_alive(),
+                "idle": {"window_seen": HEARTBEAT["seen"],
+                         "since_heartbeat": round(time.time() - HEARTBEAT["last"], 1),
+                         "jobs": ACTIVE_JOBS["n"]}}))
         if p.path == "/api/chains":
             # Every chained project gets its OWN latent folder so two projects can
             # never overwrite each other's slots. Folder name IS the project id.
@@ -314,6 +348,13 @@ class H(BaseHTTPRequestHandler):
     def do_POST(self):
         p = urllib.parse.urlparse(self.path)
         length = int(self.headers.get("Content-Length", 0))
+        if p.path == "/api/closing":
+            # pagehide beacon: the window is going away. Pull the heartbeat clock back so
+            # the idle watchdog frees the card in CLOSE_GRACE seconds unless a window
+            # (a reload, or another tab) heartbeats first.
+            self.rfile.read(length)
+            HEARTBEAT["last"] = min(HEARTBEAT["last"], time.time() - (IDLE_FREE_AFTER - CLOSE_GRACE))
+            return self._send(200, json.dumps({"ok": True}))
         body = json.loads(self.rfile.read(length)) if length else {}
 
         if p.path == "/api/video":
@@ -1085,4 +1126,6 @@ if __name__ == "__main__":
     print(f"Comfy API -> {COMFY}" + (f"   (Qwen -> {VLO})" if VLO != COMFY else ""))
     print(f"Videos    -> {VIDEO_DIR}")
     print(f"Images    -> {IMAGE_DIR}")
+    import threading
+    threading.Thread(target=_idle_watchdog, daemon=True).start()
     ThreadingHTTPServer(("127.0.0.1", port), H).serve_forever()

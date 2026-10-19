@@ -94,6 +94,14 @@ Anything `start.sh` reads from the environment can be baked in, e.g.
 start Backlot (usually because ComfyUI is not running) you get a desktop notification pointing at
 `launch.log` instead of a silent failure.
 
+## Closing the window hands the GPU back
+
+ComfyUI keeps the last model resident (up to ~15 GB for H3) until something else needs the
+room. Backlot watches for its own windows: when the last one closes and nothing is rendering,
+it asks ComfyUI to drop its weights about ten seconds later, so the card is free for whatever
+you do next. A reload or a second tab cancels it; a render in flight finishes first. The app
+and the proxy keep running quietly (`./stop.sh` ends them) and ComfyUI itself is never stopped.
+
 ## Configuration
 
 Everything is an environment variable; `start.sh` sets the first two for you.

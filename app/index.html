@@ -429,6 +429,9 @@ let FREEMSG = null;   // declared up here: status() runs at load and reads it (T
 // Heartbeat: lets the server know a window is open.
 setInterval(() => fetch('/api/heartbeat').catch(()=>{}), 5000);
 fetch('/api/heartbeat').catch(()=>{});
+// Closing the window: tell the server so it hands the GPU back a few seconds later
+// (a reload heartbeats again first, so refreshing never unloads anything).
+addEventListener('pagehide', () => { navigator.sendBeacon('/api/closing'); });
 
 function status(){
   fetch('/api/status').then(r=>r.json()).then(d=>{

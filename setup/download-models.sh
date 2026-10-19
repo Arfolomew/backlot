@@ -16,8 +16,8 @@ get() {  # get <repo> <path-in-repo> <models-subfolder>
   mkdir -p "$M/$sub"
   if [ -s "$M/$sub/$name" ]; then echo "have   $sub/$name"; return; fi
   echo "fetch  $sub/$name  <- $repo/$path"
-  huggingface-cli download "$repo" "$path" --local-dir "/tmp/oh-dl" >/dev/null
-  mv "/tmp/oh-dl/$path" "$M/$sub/$name"
+  huggingface-cli download "$repo" "$path" --local-dir "/tmp/backlot-dl" >/dev/null
+  mv "/tmp/backlot-dl/$path" "$M/$sub/$name"
 }
 
 # ---- required: MiniMax H3 ----

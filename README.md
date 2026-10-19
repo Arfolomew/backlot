@@ -1,7 +1,9 @@
-# Open Higgsfield Studio
+# Backlot
 
-A local, open-weights video and image studio that runs on your own ComfyUI through the
-**Comfy Developer Platform API** (Comfy SDK). One window, no node graphs, a 16 GB consumer GPU.
+**The open-source Higgsfield that runs on a 16 GB card.**
+
+A local, open-weights video and image studio on your own ComfyUI, driven through the
+**Comfy Developer Platform API** (Comfy SDK). One window, no node graphs, the GPU you already own.
 
 Built for the Comfy [Open Source Higgsfield](https://www.comfy.org/open-source-higgsfield) challenge.
 
@@ -23,7 +25,7 @@ Built for the Comfy [Open Source Higgsfield](https://www.comfy.org/open-source-h
 
 Every render is sent as a job through the Comfy SDK. Locally the SDK talks to
 [`comfy-api-proxy`](https://pypi.org/project/comfy-api-proxy/), which serves the Comfy API in front
-of a plain ComfyUI. Point `OH_COMFY_URL` at Comfy Cloud and nothing else changes.
+of a plain ComfyUI. Point `BACKLOT_COMFY_URL` at Comfy Cloud and nothing else changes.
 
 All models are open weights. No partner nodes, no closed APIs. Full list with download links in
 [docs/models.md](docs/models.md).
@@ -49,8 +51,8 @@ All models are open weights. No partner nodes, no closed APIs. Full list with do
 ## Setup
 
 ```bash
-git clone https://github.com/<you>/open-higgsfield-studio
-cd open-higgsfield-studio
+git clone https://github.com/<you>/backlot
+cd backlot
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 # node packs + models into your ComfyUI
@@ -80,11 +82,11 @@ Everything is an environment variable; `start.sh` sets the first two for you.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `OH_COMFY_URL` | `http://127.0.0.1:8199` | Comfy API endpoint (the local proxy, or Comfy Cloud). |
-| `OH_COMFYUI_URL` | `http://127.0.0.1:8188` | The plain ComfyUI behind it. Used only by the Free VRAM button. |
-| `OH_QWEN_URL` | same as `OH_COMFY_URL` | Optional second endpoint for Qwen Image 2.1 if you run it on another ComfyUI. |
-| `OH_OUTPUT_DIR` | `./output` | Where videos and images are filed (`videos/`, `images/`). |
-| `OH_COMFY_OUTPUT_DIR` | unset | ComfyUI's output folder. Lets latent chaining list the clips it has saved. |
+| `BACKLOT_COMFY_URL` | `http://127.0.0.1:8199` | Comfy API endpoint (the local proxy, or Comfy Cloud). |
+| `BACKLOT_COMFYUI_URL` | `http://127.0.0.1:8188` | The plain ComfyUI behind it. Used only by the Free VRAM button. |
+| `BACKLOT_QWEN_URL` | same as `BACKLOT_COMFY_URL` | Optional second endpoint for Qwen Image 2.1 if you run it on another ComfyUI. |
+| `BACKLOT_OUTPUT_DIR` | `./output` | Where videos and images are filed (`videos/`, `images/`). |
+| `BACKLOT_COMFY_OUTPUT_DIR` | unset | ComfyUI's output folder. Lets latent chaining list the clips it has saved. |
 | `PORT` | `8801` | App port. |
 
 ## How it is built

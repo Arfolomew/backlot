@@ -10,14 +10,14 @@ def rep(a, b, count=1):
 head_end = s.index('import base64')
 s = '''#!/usr/bin/env python3
 """
-Open Higgsfield Studio: a local, open-weights video + image studio on ComfyUI.
+Backlot: a local, open-weights video + image studio on ComfyUI.
 
 Video on MiniMax H3 (text, image, reference images, 360 orbit, latent chaining), stills on
 Krea 2 Turbo and Qwen Image 2.1 (text, img2img, style reference, identity edit, instruction
 edit, camera angles), SeedVR2 / RealESRGAN upscaling and RIFE interpolation.
 
 Every render goes through the Comfy Developer Platform API via the Comfy SDK. Locally that is
-`comfy-api-proxy` in front of a plain ComfyUI (see README); point OH_COMFY_URL at Comfy Cloud
+`comfy-api-proxy` in front of a plain ComfyUI (see README); point BACKLOT_COMFY_URL at Comfy Cloud
 and the same code runs there.
 
 Workflow graphs live in workflows/ (one builder per model family); this file is the HTTP app.
@@ -47,21 +47,21 @@ from comfy_backend import Backend, gpu_used_mib   # noqa: E402
 a = s.index('COMFY = "http://127.0.0.1:8189"')
 b = s.index('QWEN21_UNET = ')
 s = s[:a] + '''# ---- configuration (environment) ----
-#   OH_COMFY_URL          Comfy API endpoint: the local comfy-api-proxy (default) or Comfy Cloud.
-#   OH_COMFYUI_URL        the plain ComfyUI behind the proxy, used ONLY for the "free VRAM" button.
-#   OH_QWEN_URL           optional second Comfy API endpoint for Qwen Image 2.1 (default: same as above).
-#   OH_QWEN_COMFYUI_URL   its plain ComfyUI, same purpose as OH_COMFYUI_URL.
-#   OH_OUTPUT_DIR         where finished videos and images are filed (default: ./output).
-#   OH_COMFY_OUTPUT_DIR   optional: ComfyUI's output folder, so latent chaining can list saved clips.
+#   BACKLOT_COMFY_URL          Comfy API endpoint: the local comfy-api-proxy (default) or Comfy Cloud.
+#   BACKLOT_COMFYUI_URL        the plain ComfyUI behind the proxy, used ONLY for the "free VRAM" button.
+#   BACKLOT_QWEN_URL           optional second Comfy API endpoint for Qwen Image 2.1 (default: same as above).
+#   BACKLOT_QWEN_COMFYUI_URL   its plain ComfyUI, same purpose as BACKLOT_COMFYUI_URL.
+#   BACKLOT_OUTPUT_DIR         where finished videos and images are filed (default: ./output).
+#   BACKLOT_COMFY_OUTPUT_DIR   optional: ComfyUI's output folder, so latent chaining can list saved clips.
 #   PORT                  app port (default 8801).
-COMFY = os.environ.get("OH_COMFY_URL", "http://127.0.0.1:8199").rstrip("/")
-COMFY_DIRECT = os.environ.get("OH_COMFYUI_URL", "http://127.0.0.1:8188").rstrip("/")
-VLO = os.environ.get("OH_QWEN_URL", COMFY).rstrip("/")
-VLO_DIRECT = os.environ.get("OH_QWEN_COMFYUI_URL", COMFY_DIRECT if VLO == COMFY else "").rstrip("/")
+COMFY = os.environ.get("BACKLOT_COMFY_URL", "http://127.0.0.1:8199").rstrip("/")
+COMFY_DIRECT = os.environ.get("BACKLOT_COMFYUI_URL", "http://127.0.0.1:8188").rstrip("/")
+VLO = os.environ.get("BACKLOT_QWEN_URL", COMFY).rstrip("/")
+VLO_DIRECT = os.environ.get("BACKLOT_QWEN_COMFYUI_URL", COMFY_DIRECT if VLO == COMFY else "").rstrip("/")
 BACKEND = Backend(COMFY, COMFY_DIRECT, label="ComfyUI")
 QWEN = BACKEND if VLO == COMFY else Backend(VLO, VLO_DIRECT, label="Qwen ComfyUI")
 # ComfyUI's own output folder. Optional; only latent chaining (Motion Context) reads it.
-COMFY_STAGING = os.path.expanduser(os.environ.get("OH_COMFY_OUTPUT_DIR", ""))
+COMFY_STAGING = os.path.expanduser(os.environ.get("BACKLOT_COMFY_OUTPUT_DIR", ""))
 
 # Qwen Image 2.1 + Kijai's turbo LoRA: base INT8, 8 steps, cfg 1. Needs the native Qwen 2.1
 # nodes (ComfyUI 0.35+). By default it runs on the same backend as everything else.
@@ -74,7 +74,7 @@ IMAGE_DIR = os.path.join(OUTPUT_ROOT, "Krea_2_Turbo")
 os.makedirs(VIDEO_DIR, exist_ok=True)
 os.makedirs(IMAGE_DIR, exist_ok=True)
 ''', '''# Every output this app produces lands under OUTPUT_ROOT, nowhere else.
-OUTPUT_ROOT = os.path.expanduser(os.environ.get("OH_OUTPUT_DIR", os.path.join(HERE, "..", "output")))
+OUTPUT_ROOT = os.path.expanduser(os.environ.get("BACKLOT_OUTPUT_DIR", os.path.join(HERE, "..", "output")))
 VIDEO_DIR = os.path.join(OUTPUT_ROOT, "videos")
 IMAGE_DIR = os.path.join(OUTPUT_ROOT, "images")
 TMP_DIR = os.path.join(OUTPUT_ROOT, ".tmp")
@@ -127,7 +127,7 @@ def vlo_up(wait=0):
 
 
 def comfy_free():
-    """Drop resident model weights from the card (needs OH_COMFYUI_URL). Never starts anything."""
+    """Drop resident model weights from the card (needs BACKLOT_COMFYUI_URL). Never starts anything."""
     return BACKEND.free()
 
 
@@ -249,7 +249,7 @@ rep('''    port = int(os.environ.get("PORT", "8801"))
     print(f"Images   -> {IMAGE_DIR}")
     threading.Thread(target=_watchdog, daemon=True).start()
 ''', '''    port = int(os.environ.get("PORT", "8801"))
-    print(f"Open Higgsfield Studio on http://localhost:{port}")
+    print(f"Backlot on http://localhost:{port}")
     print(f"Comfy API -> {COMFY}" + (f"   (Qwen -> {VLO})" if VLO != COMFY else ""))
     print(f"Videos    -> {VIDEO_DIR}")
     print(f"Images    -> {IMAGE_DIR}")

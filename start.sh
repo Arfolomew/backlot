@@ -1,5 +1,5 @@
 #!/bin/bash
-# Start Open Higgsfield Studio against a ComfyUI that is already running.
+# Start Backlot against a ComfyUI that is already running.
 #
 #   ./start.sh                      ComfyUI on http://127.0.0.1:8188 (the default)
 #   COMFYUI_URL=http://127.0.0.1:8189 ./start.sh
@@ -37,8 +37,8 @@ if ! curl -s -m 2 "http://127.0.0.1:$PROXY_PORT/api/v2/health" >/dev/null; then
   done
 fi
 
-export OH_COMFY_URL="http://127.0.0.1:$PROXY_PORT"
-export OH_COMFYUI_URL="$COMFYUI_URL"
+export BACKLOT_COMFY_URL="http://127.0.0.1:$PROXY_PORT"
+export BACKLOT_COMFYUI_URL="$COMFYUI_URL"
 export PORT
 if ! curl -s -m 1 "http://127.0.0.1:$PORT/api/status" >/dev/null; then
   nohup "$VENV/bin/python" app/server.py > app.log 2>&1 &
@@ -48,6 +48,6 @@ if ! curl -s -m 1 "http://127.0.0.1:$PORT/api/status" >/dev/null; then
   done
 fi
 
-echo "Open Higgsfield Studio -> http://localhost:$PORT   (Comfy API: $OH_COMFY_URL -> $COMFYUI_URL)"
+echo "Backlot -> http://localhost:$PORT   (Comfy API: $BACKLOT_COMFY_URL -> $COMFYUI_URL)"
 if command -v xdg-open >/dev/null; then xdg-open "http://localhost:$PORT" >/dev/null 2>&1 || true
 elif command -v open >/dev/null; then open "http://localhost:$PORT" || true; fi

@@ -39,7 +39,7 @@ class Backend:
                 os.environ["COMFY_BASE_URL"] = self.api_url
                 self._client = Comfy(
                     timeout=120.0,
-                    client_info="open-higgsfield-studio",
+                    client_info="backlot",
                     retry=RetryPolicy(collect_max_elapsed=4 * 3600.0))
             return self._client
 

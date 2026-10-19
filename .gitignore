@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+output/
+*.log
+.proxy-state/
+app/*.bak*
+app/prompts/*.bak*

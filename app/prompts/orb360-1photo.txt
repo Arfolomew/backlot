@@ -1,0 +1,27 @@
+subject_definitions:
+<Subject 1> is the exact same rigid subject shown in <Picture 1>. Its geometry, proportions, materials, colors, markings, and surface details remain unchanged.
+<Picture 1> is the first-frame viewpoint of [Shot 1].
+
+summary:
+[reference generation] ORB360_CW. A frozen-moment 360-degree orbit of <Subject 1> in the real environment shown in <Picture 1>, like a single instant stopped in time.
+
+retention_analysis:
+<Subject 1> (appears in [Shot 1]): fully_preserved - its geometry, proportions, materials, colors, markings and surface details are retained, and it stays completely frozen.
+<Picture 1> ([Shot 1] first frame and last frame): fully_preserved - the orbit starts and ends on this view, including its environment and light.
+
+detailed_description:
+[Shot 1] The shot begins from <Picture 1>, with its exact environment, ground, background and light. The camera performs exactly one smooth clockwise 360-degree orbit around the completely stationary <Subject 1>, at constant radius, constant elevation, constant focal length, constant speed, and constant framing, ending at the starting viewpoint. The subject remains perfectly rigid and stationary. The surrounding real scene stays in place in the world and is revealed consistently as the camera circles, continuing the same location, terrain and sky seen in <Picture 1>. Everything in the scene is frozen in time and completely still. The space between the camera and <Subject 1> is clear and empty, exactly as in <Picture 1>. The scene contains only what <Picture 1> contains. Camera parallax is the only source of apparent movement. No articulation, deformation, secondary motion, wind, zoom, dolly, camera roll, cuts, lighting changes, or scene changes.
+
+All four milestones below belong to the same uninterrupted [Shot 1], not separate shots. The video runs at 24 fps. Angles describe camera motion clockwise as viewed from above, relative to the starting camera azimuth; the subject itself does not rotate. The camera moves continuously at constant angular speed between these milestones, without pausing, reversing or completing extra turns.
+At 0.000000 seconds (zero-based frame 0), the camera has advanced 0 degrees clockwise from its starting azimuth; the viewpoint corresponds to <Picture 1>.
+At 1.708333 seconds (zero-based frame 41), the camera has advanced 120 degrees clockwise from its starting azimuth.
+At 3.416667 seconds (zero-based frame 82), the camera has advanced 240 degrees clockwise from its starting azimuth.
+At 5.125000 seconds (zero-based frame 123), the camera has advanced 360 degrees clockwise from its starting azimuth; the viewpoint corresponds to <Picture 1>.
+
+The entire subject is a single frozen three-dimensional scene throughout the shot. Every visible eyelid keeps its reference position: no blinking. Each eye keeps a fixed gaze relative to the head and never tracks the moving camera. Facial expression, mouth, head, hands, feet and body pose remain unchanged. Hair strands, clothing, ribbons, accessories and loose parts are rigidly fixed in the same positions. There is no breathing, sway, settling or secondary motion. Only the camera changes position. Camera radius, elevation, focal length and look-at point stay fixed. Lighting stays fixed in world space; normal viewpoint-dependent shading and reflections remain physically consistent.
+
+overall_soundscape:
+N/A
+
+non_diegetic_music:
+N/A

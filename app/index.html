@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Open Higgsfield Studio</title>
+<style>
+  :root{ --bg:#0d0e12; --panel:#15171d; --panel2:#1c1f27; --line:#2a2e38;
+    --text:#e8e9ee; --muted:#8b909c; --accent:#ff9d5c; --accent2:#ff6b9d; --ok:#54d68a; --warn:#ffd166; }
+  *{ margin:0; padding:0; box-sizing:border-box; }
+  body{ background:var(--bg); color:var(--text); font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; height:100vh; overflow:hidden; }
+  .app{ display:flex; flex-direction:column; height:100vh; }
+  header{ display:flex; align-items:center; gap:18px; padding:12px 20px; border-bottom:1px solid var(--line); background:var(--panel); }
+  .logo{ font-weight:800; letter-spacing:.18em; font-size:18px;
+    background:linear-gradient(90deg,var(--accent),var(--accent2)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+  .status{ margin-left:auto; display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; }
+  .dot{ width:8px; height:8px; border-radius:50%; background:#666; }
+  .dot.on{ background:var(--ok); box-shadow:0 0 8px var(--ok); }
+
+  .main{ display:grid; grid-template-columns:380px minmax(0,1fr); flex:1; min-height:0; }
+  .controls{ padding:20px; overflow-y:auto; border-right:1px solid var(--line); background:var(--panel); min-width:0;
+             display:flex; flex-direction:column; }
+  .stage{ display:flex; flex-direction:column; min-height:0; min-width:0; overflow:hidden; }
+  .viewer{ flex:1; display:flex; align-items:center; justify-content:center; padding:24px; min-height:0; min-width:0; overflow:hidden; position:relative; }
+  .viewer video,.viewer img{ max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; border-radius:12px; box-shadow:0 12px 50px rgba(0,0,0,.5); }
+  .placeholder{ color:var(--muted); text-align:center; }
+  .gallery{ height:104px; border-top:1px solid var(--line); display:flex; gap:8px; padding:10px 12px; overflow-x:auto; background:var(--panel); }
+  .gallery video,.gallery img{ height:80px; width:80px; object-fit:cover; border-radius:8px; cursor:pointer; border:1px solid var(--line); flex:0 0 auto; background:#000; }
+  .gallery video:hover,.gallery img:hover{ border-color:var(--accent); }
+
+  /* Top-level Video / Image tabs */
+  .tabs{ display:flex; gap:0; margin-left:24px; }
+  .tab{ padding:7px 20px; font-size:13px; font-weight:700; letter-spacing:.04em; color:var(--muted);
+        background:var(--panel2); border:1px solid var(--line); cursor:pointer; }
+  .tab:first-child{ border-radius:8px 0 0 8px; } .tab:last-child{ border-radius:0 8px 8px 0; border-left:none; }
+  .tab.active{ color:#0a0a0f; background:linear-gradient(90deg,var(--accent),var(--accent2)); border-color:transparent; }
+
+  label{ display:block; font-size:12px; color:var(--muted); margin:16px 0 6px; font-weight:600; letter-spacing:.02em; }
+  label.first{ margin-top:0; }
+  textarea,input[type=text],input[type=number]{ width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--text);
+    border-radius:9px; padding:11px 13px; font:inherit; outline:none; resize:vertical; }
+  textarea:focus,input:focus{ border-color:var(--accent); }
+  /* 🔴 .controls is display:flex;flex-direction:column, so a textarea is a FLEX
+     ITEM and its height gets recomputed by the layout — the resize handle drags
+     and then snaps straight back. flex:none pins it so the drag sticks. */
+  textarea{ min-height:110px; flex:none; resize:vertical; }
+  .ratios{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+  .ratio{ padding:9px 0; text-align:center; background:var(--panel2); border:1px solid var(--line); border-radius:8px; cursor:pointer; font-size:12px; font-weight:600; color:var(--muted); }
+  .ratio.active{ border-color:var(--accent); color:var(--text); background:rgba(255,157,92,.12); }
+  .row{ display:flex; gap:10px; }
+  .row > div{ flex:1; }
+  .slider-row{ display:flex; align-items:center; gap:10px; }
+  input[type=range]{ flex:1; accent-color:var(--accent); }
+  .val{ font-variant-numeric:tabular-nums; color:var(--text); min-width:42px; text-align:right; font-weight:600; }
+  details{ margin-top:10px; }
+  summary{ cursor:pointer; color:var(--muted); font-size:12px; font-weight:600; padding:6px 0; }
+  .gen{ width:100%; margin-top:20px; padding:14px; border:none; border-radius:10px; cursor:pointer; font-weight:700; font-size:15px; letter-spacing:.03em;
+    color:#0a0a0f; background:linear-gradient(90deg,var(--accent),var(--accent2)); transition:transform .15s, opacity .2s; }
+  .gen:hover{ transform:translateY(-1px); } .gen:disabled{ opacity:.5; cursor:wait; transform:none; }
+  .agrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; width:100%; height:100%; overflow:auto; padding:12px; align-content:start; }
+  .agrid figure{ margin:0; cursor:pointer; } .agrid img{ width:100%; border-radius:8px; display:block; }
+  .agrid figcaption{ font-size:11px; color:var(--muted); margin-top:4px; }
+  .agrid .pending{ aspect-ratio:2/3; border:1px dashed var(--line); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--muted); text-align:center; padding:6px; }
+  .meta{ position:absolute; bottom:14px; left:14px; font-size:12px; color:var(--muted); background:rgba(0,0,0,.5); padding:5px 10px; border-radius:6px; }
+  .spinner{ width:46px; height:46px; border:3px solid var(--line); border-top-color:var(--accent); border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 14px; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .hint{ font-size:11px; color:var(--muted); margin-top:6px; }
+  .err{ color:#ff8080; font-size:12px; margin-top:10px; white-space:pre-wrap; }
+
+  /* Model picker — top of the menu box */
+  .modelpick{ display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .modelpick .ratio{ padding:11px 0; font-size:13px; }
+  .modelpick .ratio.disabled{ opacity:.45; cursor:not-allowed; }
+
+  /* Upscale — pinned to the very bottom of the menu area */
+  .upscale-block{ margin-top:auto; padding-top:22px; border-top:1px solid var(--line); }
+  .upscale{ width:100%; padding:13px; border-radius:10px; cursor:pointer; font-weight:700; font-size:14px; letter-spacing:.03em;
+    color:var(--text); background:var(--panel2); border:1px solid var(--accent); transition:background .2s; }
+  .upscale:hover{ background:rgba(255,157,92,.14); }
+  .upscale:disabled{ opacity:.5; cursor:wait; }
+  .browse{ display:block; margin-top:8px; font-size:12px; color:var(--accent); cursor:pointer; text-align:center; }
+  #vidfile{ display:none; }
+  #viewer img{ background:repeating-conic-gradient(#3a3a3a 0% 25%, #2a2a2a 0% 50%) 50% / 24px 24px; }
+  .chk{ display:flex; align-items:center; gap:8px; margin-top:10px; font-size:12px; color:var(--muted); }
+
+  /* Reference picker — the number on each thumb IS its <Picture N> */
+  .reflist{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .refitem{ position:relative; width:72px; }
+  .refitem img{ width:72px; height:72px; object-fit:cover; border-radius:8px; border:1px solid var(--line); display:block; background:#000; }
+  .refnum{ position:absolute; top:-6px; left:-6px; width:22px; height:22px; border-radius:50%; font-size:11px; font-weight:800;
+    display:flex; align-items:center; justify-content:center; color:#0a0a0f;
+    background:linear-gradient(135deg,var(--accent),var(--accent2)); box-shadow:0 2px 6px rgba(0,0,0,.5); }
+  .refdel{ position:absolute; top:-6px; right:-6px; width:20px; height:20px; border-radius:50%; border:1px solid var(--line);
+    background:var(--panel2); color:var(--text); font-size:12px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .refdel:hover{ border-color:#ff8080; color:#ff8080; }
+  .refmove{ display:flex; gap:4px; margin-top:4px; }
+  .refmove button{ flex:1; background:var(--panel2); border:1px solid var(--line); color:var(--muted); border-radius:5px;
+    font-size:11px; line-height:16px; cursor:pointer; padding:0; }
+  .refmove button:hover:not(:disabled){ border-color:var(--accent); color:var(--text); }
+  .refmove button:disabled{ opacity:.3; cursor:default; }
+  .refname{ font-size:10px; color:var(--muted); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .addref{ width:72px; height:72px; border:1px dashed var(--line); border-radius:8px; color:var(--muted); cursor:pointer;
+    display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:300; background:var(--panel2); }
+  .addref:hover{ border-color:var(--accent); color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">OPEN HIGGSFIELD STUDIO</div>
+    <div class="tabs" id="tabs">
+      <div class="tab active" data-tab="video">VIDEO</div>
+      <div class="tab" data-tab="image">IMAGE</div>
+    </div>
+    <div class="status"><span class="dot" id="dot"></span><span id="statustxt">checking backend…</span></div>
+  </header>
+
+  <div class="main">
+    <div class="controls">
+     <div id="video-panel" style="display:flex; flex-direction:column; flex:1; min-height:0">
+
+      <label class="first">Pick a Model</label>
+      <div class="modelpick" id="modelpick">
+        <div class="ratio active" data-model="minimax">MiniMax</div>
+      </div>
+      <div class="hint" id="modelhint">MiniMax H3 · local · text and image to video with audio.</div>
+
+      <label>Mode</label>
+      <div class="ratios" id="vmode">
+        <div class="ratio active" data-mode="t2v">Text</div>
+        <div class="ratio" data-mode="i2v">Image</div>
+        <div class="ratio" data-mode="ref">Reference</div>
+        <div class="ratio" data-mode="orbit">360 Orbit</div>
+      </div>
+      <div id="orbit-box" class="hint" style="display:none"><b>360 Orbit</b> (ORB360 LoRA). The camera circles the subject
+        once, clockwise, and lands back on the first frame, so the clip loops. Add your photo in the picker below.
+        <b>1 photo</b> works, but H3 has to invent the back side and can ADD things that were never there (a test run added a water glass), so check every frame before a client sees it; <b>3 photos</b> (front, then about 120&deg; and 240&deg;
+        around, clockwise) give a clean orbit. No prompt needed, length is fixed at 5.2 s, about 12 min.
+        Size follows the aspect button: 16:9 renders 1152&times;768, 9:16 832&times;1024, 1:1 800&times;800.</div>
+
+      <div id="i2v-box" style="display:none">
+        <label>Input image</label>
+        <input type="file" id="i2vfile" accept="image/*">
+        <div class="hint">The first frame of the clip. H3 holds it far better than it invents one.
+          It is center-cropped to the video shape you pick, never stretched.</div>
+        <div class="hint" id="i2vcrop" style="color:var(--accent, #ff9d5c)"></div>
+      </div>
+
+      <div id="ref-box" style="display:none">
+        <label>Reference images <span class="hint" style="text-transform:none">(up to 9)</span></label>
+        <input type="file" id="reffiles" accept="image/*" multiple style="display:none">
+        <div class="reflist" id="reflist"></div>
+        <div class="hint" id="refcount">Add them one at a time or several at once &mdash; each new pick is <b>added</b>, never replaces what is there. The number on each thumbnail is its <b>&lt;Picture N&gt;</b>. Use &#9664; &#9654; to reorder, &times; to drop one.</div>
+
+        <div id="ref-extras">
+        <label style="margin-top:14px">Reference audio <span class="hint" style="text-transform:none">(optional, up to 3)</span></label>
+        <input type="file" id="refaudiofiles" accept="audio/*,.wav,.mp3,.flac,.m4a,.ogg,.opus" multiple style="display:none">
+        <div id="refaudiolist"></div>
+        <div class="hint">Voice timbre for a speaking subject, or a soundscape to match. Cite it in the prompt as <b>&lt;Audio N&gt;</b> and put the spoken line in <b>&lt;d&gt;...&lt;/d&gt;</b> tags. Trim the clip to roughly the length of the line.</div>
+
+        <label style="margin-top:14px">Chain project <span class="hint" style="text-transform:none">(keeps each video's chain separate)</span></label>
+        <input type="text" id="chainproject" list="chainlist" placeholder="h3_context" value="h3_context" autocomplete="off">
+        <datalist id="chainlist"></datalist>
+        <div class="hint" id="chainstatus">Pick an existing project or type a new name. Each project gets its OWN latent folder, so starting a new video can never overwrite another one's chain.</div>
+
+        <label style="margin-top:14px">Chain this clip <span class="hint" style="text-transform:none">(Motion Context)</span></label>
+        <input type="number" id="chainindex" min="0" max="999" step="1" value="0">
+        <div class="hint">0 = off. Set <b>1</b> for the first clip of a sequence, <b>2</b> for the next, and so on. Clip N continues clip N&minus;1 in latent space, so motion and sound carry across the join instead of restarting. Pins 22 frames, which come off the front of the delivered clip, so each chained clip renders a little longer.</div>
+        </div><!-- /ref-extras -->
+      </div>
+
+      <label>Prompt <span class="browse" id="tmpl" style="float:right; margin:0">insert template</span></label>
+      <textarea id="prompt" placeholder="Describe the shot and the motion. H3 rewards long, specific prompts: lock the composition, then give timecoded beats."></textarea>
+
+      <label>Aspect ratio</label>
+      <div class="ratios" id="vratio">
+        <div class="ratio active" data-w="1344" data-h="768">16:9</div>
+        <div class="ratio" data-w="768" data-h="1344">9:16</div>
+        <div class="ratio" data-w="1024" data-h="1024">1:1</div>
+      </div>
+      <div class="hint" id="dimhint">1344 &times; 768</div>
+
+      <label>Duration <span class="val" id="secv" style="float:right">5.2s</span></label>
+      <div class="slider-row">
+        <input type="range" id="seconds" min="2" max="10" step="0.5" value="5">
+      </div>
+      <div class="hint" id="lenhint">H3 snaps to a 17n+5 frame grid, so the real length lands near your pick. Measured at 1344&times;768: 5s &asymp; 7.5 min, 10s &asymp; 15-20 min. The model supports 15s, but that runs ~40 min on this card so the slider stops at 10.</div>
+
+      <label>Camera Motion LoRA</label>
+      <div class="chk" style="margin-top:0">
+        <input type="checkbox" id="camera">
+        <label for="camera" style="margin:0; cursor:pointer">control the camera move</label>
+      </div>
+      <div class="slider-row" id="camrow" style="display:none; margin-top:8px">
+        <input type="range" id="camstr" min="0.6" max="1.2" step="0.05" value="1.0">
+        <span class="val" id="camstrv">1.00</span>
+      </div>
+      <div class="hint" id="camhint" style="display:none">
+        0.8 gentle &middot; 1.0 definite &middot; above 1.2 goes unstable. Adds
+        &ldquo;camera motion,&rdquo; to the front of your prompt, which is the trigger word.
+        Describe the move: push-in, pull-back, orbit, tracking, aerial, crane, pan, macro.
+      </div>
+
+      <details>
+        <summary>Advanced</summary>
+        <label>Seed (&minus;1 = random)</label>
+        <input type="number" id="seed" value="-1">
+        <div class="hint">Steps 8, head-chunks 16 and the CPU text encoder are fixed to the proven recipe.</div>
+      </details>
+
+      <button class="gen" id="gen">Generate Video</button>
+      <div class="err" id="err"></div>
+
+      <div class="upscale-block">
+        <button class="upscale" id="upscale">Upscale</button>
+        <input type="file" id="vidfile" accept="video/mp4,video/*">
+        <span class="browse" id="browse">Browse&hellip; (upscale any video)</span>
+        <button class="upscale" id="slowmo" style="margin-top:10px">Slow down 2&times;</button>
+        <input type="file" id="slowfile" accept="video/mp4,video/*" style="display:none">
+        <span class="browse" id="slowbrowse">Browse&hellip; (slow down any video)</span>
+        <div class="hint">Doubles the length (a 5 s orbit becomes 10 s). RIFE draws a new frame between every pair, so
+          it stays smooth instead of stuttering; sound is stretched to match without going deep. About a minute.</div>
+        <div class="chk">
+          <input type="checkbox" id="interp">
+          <label for="interp" style="margin:0; cursor:pointer">also double the frame rate (RIFE)</label>
+        </div>
+        <div class="chk">
+          <input type="checkbox" id="vfast">
+          <label for="vfast" style="margin:0; cursor:pointer">fast mode (old RealESRGAN, softer)</label>
+        </div>
+        <div class="hint">SeedVR2 to 1080p: real skin and detail, keeps the audio. About 5&ndash;6 min per 5 s clip
+          (fast mode: about 1 min, doubles the size but looks smoother/plastic).</div>
+      </div>
+     </div><!-- /video-panel -->
+
+     <div id="image-panel" style="display:none; flex-direction:column; flex:1; min-height:0">
+
+      <label class="first">Model</label>
+      <div class="modelpick" id="imodel">
+        <div class="ratio active" data-model="krea2">Krea 2 Turbo</div>
+        <div class="ratio" data-model="qwen21">Qwen 2.1</div>
+      </div>
+      <div class="hint" id="imodelhint">Flux2-family, fp8, local. Distilled turbo, so there is no CFG and no negative prompt.</div>
+      <div class="chk" id="itrans-box" style="display:none">
+        <input type="checkbox" id="itrans">
+        <label for="itrans" style="margin:0; cursor:pointer">Transparent background (PNG with real alpha)</label>
+      </div>
+
+      <label>Mode</label>
+      <div class="ratios" id="imode">
+        <div class="ratio active" data-mode="text">Text</div>
+        <div class="ratio" data-mode="img2img">Image to Image</div>
+        <div class="ratio" data-mode="reference">Reference</div>
+        <div class="ratio" data-mode="identity">Identity</div>
+        <div class="ratio" data-mode="edit">Edit</div>
+        <div class="ratio" data-mode="angles">Angles</div>
+      </div>
+
+      <div id="isrc-box" style="display:none">
+        <label>Input image</label>
+        <input type="file" id="isrcfile" accept="image/*">
+        <div class="hint"><span class="browse" id="isrcscreen" style="margin:0">use the image on screen</span> &mdash; or click any image in the strip below, then this.</div>
+        <img id="isrcthumb" style="display:none; width:100%; border-radius:8px; margin-top:6px">
+        <div class="hint" id="isrchint">Image to Image keeps the input&rsquo;s shape at ~2 MP, Edit at ~1 MP. Reference and Identity use the aspect buttons.</div>
+        <div id="iextra-box" style="display:none">
+          <label>More reference images (optional, up to 9)</label>
+          <input type="file" id="iextra" accept="image/*" multiple>
+          <div class="hint" id="iextrahint">Call them &ldquo;image 2&rdquo;, &ldquo;image 3&rdquo;&hellip; in the prompt. The input image above is image 1 and sets the output shape.</div>
+        </div>
+      </div>
+
+      <div id="idenoise-box" style="display:none">
+        <label>Strength <span class="val" id="idenoisev" style="float:right">0.35</span></label>
+        <div class="slider-row"><input type="range" id="idenoise" min="5" max="100" value="35"></div>
+        <div class="hint">How much Krea redraws. Measured Oct 4 on the Sherlock pool table:
+          <b>0.2</b> same layout, faces refreshed &middot; <b>0.35</b> same layout, new faces, the prompt can add people
+          &middot; <b>0.6</b> same room and blocking, mostly a new picture. 1.0 ignores the input.</div>
+      </div>
+
+      <div id="iid-note" style="display:none" class="hint"><b>Identity.</b> Keeps the SAME person (face, hair,
+        outfit) and puts them somewhere new. Give it a clear photo of one person and write a plain instruction:
+        <i>&ldquo;Show this man sitting in a candlelit pub holding a pint.&rdquo;</i> Anything you don&rsquo;t mention
+        (a pipe, a hat) tends to stay. Renders at ~1 MP in the aspect you pick, 10 steps, about 40s.
+        Oct 4 test: face likeness 0.81 to the source. Krea 2 Identity Edit v1.2.</div>
+      <div id="iedit-note" style="display:none" class="hint"><b>Edit (Qwen).</b> Changes ONE thing about a real photo and
+        keeps everything else: <i>&ldquo;Relight to dusk with every window glowing&rdquo;</i>, <i>&ldquo;Make it golden hour with the
+        string lights on&rdquo;</i>, <i>&ldquo;Replace the background with a coffee shop&rdquo;</i>, <i>&ldquo;Remove the trash can on the
+        left&rdquo;</i>, <i>&ldquo;Show the same room from 45&deg; to the left&rdquo;</i>. End with <i>&ldquo;Keep the &hellip; exactly the
+        same.&rdquo;</i> &#x1F534; Only name things that are IN the photo (asked to clear an island that didn&rsquo;t exist, it built one).
+        About 25 s at 1 MP in the photo&rsquo;s own shape; hit <b>Upscale this image</b> after for 4K.<br>
+        <b>Which mode?</b> Change the light, background, an object or the angle of a REAL photo &rarr; <b>Edit</b>.
+        Same person in a new scene &rarr; <b>Identity</b>. A new picture in another image&rsquo;s look &rarr; <b>Reference</b>.
+        Redraw the whole picture a little or a lot &rarr; <b>Image to Image</b>. From scratch &rarr; <b>Text</b>.</div>
+      <div id="iangle-box" style="display:none">
+        <div class="hint"><b>Angles.</b> Re-shoots the input photo from new camera positions and keeps the
+          person or product the same (Qwen Edit 2511 + the fal Multiple Angles LoRA). Pick any mix below:
+          every combination of the ticked boxes gets made, one at a time, about 22 s each, ~1 MP.
+          Best on people and things shot from the side; an overhead food shot moves less.
+          &ldquo;Close-up&rdquo; barely zooms. Hit <b>Upscale this image</b> after for 4K.</div>
+        <label>Presets</label>
+        <div class="ratios" id="iang-pre">
+          <div class="ratio" data-pre="turn">Turnaround</div>
+          <div class="ratio" data-pre="hero">Hero set</div>
+          <div class="ratio" data-pre="clear">Clear</div>
+        </div>
+        <label>Around the subject</label>
+        <div class="ratios" id="iang-az" style="grid-template-columns:repeat(4,1fr)">
+          <div class="ratio" data-v="front-left quarter view">Front-left</div>
+          <div class="ratio active" data-v="front view">Front</div>
+          <div class="ratio active" data-v="front-right quarter view">Front-right</div>
+          <div class="ratio" data-v="right side view">Right</div>
+          <div class="ratio" data-v="left side view">Left</div>
+          <div class="ratio" data-v="back-left quarter view">Back-left</div>
+          <div class="ratio" data-v="back view">Back</div>
+          <div class="ratio" data-v="back-right quarter view">Back-right</div>
+        </div>
+        <label>Camera height</label>
+        <div class="ratios" id="iang-el" style="grid-template-columns:repeat(4,1fr)">
+          <div class="ratio" data-v="low-angle shot">Low</div>
+          <div class="ratio active" data-v="eye-level shot">Eye level</div>
+          <div class="ratio" data-v="elevated shot">Raised</div>
+          <div class="ratio" data-v="high-angle shot">High</div>
+        </div>
+        <label>Distance</label>
+        <div class="ratios" id="iang-di">
+          <div class="ratio" data-v="close-up">Close</div>
+          <div class="ratio active" data-v="medium shot">Medium</div>
+          <div class="ratio" data-v="wide shot">Wide</div>
+        </div>
+        <div class="hint" id="iang-count"></div>
+      </div>
+      <div id="iqwen-note" style="display:none" class="hint"><b>Qwen 2.1</b> (Kijai turbo LoRA, 8 steps, about 30 s).
+        Oct 9 bake-off: strong for transparent cutouts, chalkboard/menu text and edits that must not invent things.
+        &#x1F534; Misspelled &ldquo;CAPT&rsquo;N&rdquo; as &ldquo;CAPT&rsquo;AN&rdquo; 6 of 6 times: proof-read every client name.
+        <b>Edit</b>: plain instruction, as many as 10 photos (e.g. <i>&ldquo;Put the string lights from image 2 on the house in image 1&rdquo;</i>,
+        or <i>&ldquo;Remove the background, and output a PNG image&rdquo;</i> with Transparent ticked). It barely moves the camera; for angle changes switch back to
+        Krea 2 Turbo and use its Edit (Qwen 2511).</div>
+      <div id="iref-note" style="display:none" class="hint"><b>Style reference.</b> Makes a NEW picture from
+        your prompt, painted in the look of the input image (color, light, texture, medium). It does not
+        edit the input, so describe the whole scene you want. Uses the aspect buttons below.
+        Krea 2 style LoRA by ostris.</div>
+
+      <label>Prompt <span class="browse" id="itmpl" style="float:right; margin:0">insert template</span></label>
+      <textarea id="iprompt" placeholder="Describe the image. Name the camera body and lens, the exposure decision, and the light — Krea leans painterly unless you push it toward photography."></textarea>
+
+      <label>Aspect ratio</label>
+      <div class="ratios" id="iratio" style="grid-template-columns:repeat(5,1fr)">
+        <div class="ratio" data-w="1408" data-h="1408">1:1</div>
+        <div class="ratio active" data-w="1728" data-h="1152">3:2</div>
+        <div class="ratio" data-w="1152" data-h="1728">2:3</div>
+        <div class="ratio" data-w="1920" data-h="1088">16:9</div>
+        <div class="ratio" data-w="1088" data-h="1920">9:16</div>
+      </div>
+      <div class="hint" id="idimhint">1728 &times; 1152 (~2 MP, the Oct 4 bake-off winner)</div>
+
+      <label>Steps <span class="val" id="stepsv" style="float:right">24</span></label>
+      <div class="slider-row">
+        <input type="range" id="steps" min="0" max="1000" step="1" value="382">
+      </div>
+      <div class="hint" id="stepshint">
+        &asymp;27s &middot; sharp. Flux2Scheduler accepts 1&ndash;4096, so the slider is
+        logarithmic &mdash; a linear one would skip 15 steps per pixel. Measured at
+        1216&times;832: <b>8</b> waxy skin and mushy wood (15s) &middot; <b>20</b> real skin
+        texture, wood grain, correct glass refraction (27s) &middot; <b>32</b> label and
+        surface-grain detail (42s). Stylised work (comic, poster, illustration) is already
+        excellent at 8.
+      </div>
+
+      <details>
+        <summary>Advanced</summary>
+        <label>Seed (&minus;1 = random)</label>
+        <input type="number" id="iseed" value="-1">
+        <div class="chk">
+          <input type="checkbox" id="pweight">
+          <label for="pweight" style="margin:0; cursor:pointer">token weighting &mdash; <code>(word:2)</code> / <code>(word:-1)</code></label>
+        </div>
+        <div class="hint">Swaps in Krea2PromptWeight. ComfyUI&rsquo;s normal weight syntax does
+        nothing on this model because the Qwen3-VL encoder ignores it. Use <code>(word:-1)</code>
+        to actively remove something, which is how you kill duplication artefacts.</div>
+      </details>
+
+      <button class="gen" id="igen">Generate Image</button>
+      <div class="err" id="ierr"></div>
+
+      <label>Make it vertical</label>
+      <div class="hint">Krea looks most like a real photo in 16:9 and 3:2, so make the wide one,
+        then crop a vertical frame out of it here. SeedVR2 upscales the crop back to full phone size.</div>
+      <div class="ratios" id="cropratio" style="grid-template-columns:repeat(2,1fr)">
+        <div class="ratio active" data-r="9:16">9:16 Stories / Reels</div>
+        <div class="ratio" data-r="4:5">4:5 Instagram post</div>
+      </div>
+      <label>Crop position <span class="val" id="vposv" style="float:right">center</span></label>
+      <div class="slider-row"><input type="range" id="vpos" min="0" max="100" value="50"></div>
+      <canvas id="vprev" style="width:100%;display:none;border-radius:8px;margin-top:8px"></canvas>
+      <div class="hint" id="vhint">Generate an image or click one in the strip below first.</div>
+      <button class="gen" id="ivert" disabled>Crop to vertical + upscale</button>
+      <div class="err" id="verr"></div>
+
+      <label>Upscale (SeedVR2)</label>
+      <div class="hint">Keeps real skin, lashes and lettering (no plastic ESRGAN look). About 20 s.
+        Use it on the image you're viewing, or upload any picture from your computer.</div>
+      <div class="ratios" id="usize" style="grid-template-columns:repeat(2,1fr)">
+        <div class="ratio active" data-s="4k">4K (short side 2160)</div>
+        <div class="ratio" data-s="2x">2x</div>
+      </div>
+      <button class="gen" id="iup" disabled>Upscale this image</button>
+      <button class="gen" id="iupload" style="margin-top:8px">Upload &amp; upscale…</button>
+      <input type="file" id="iupfile" accept="image/*" style="display:none">
+      <div class="err" id="uerr"></div>
+
+     </div><!-- /image-panel -->
+    </div>
+
+    <div class="stage">
+      <div class="viewer" id="viewer">
+        <div class="placeholder" id="ph">Nothing generated yet.</div>
+      </div>
+      <div class="gallery" id="gallery"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+let VW = 1344, VH = 768, VMODE = 't2v', VIMG = null, VREFS = [], LAST = null, BUSY = false;
+let TAB = 'video', IW = 1728, IH = 1152, ILAST = null;
+let FREEMSG = null;   // declared up here: status() runs at load and reads it (TDZ)
+
+// Heartbeat: lets the server know a window is open.
+setInterval(() => fetch('/api/heartbeat').catch(()=>{}), 5000);
+fetch('/api/heartbeat').catch(()=>{});
+
+function status(){
+  fetch('/api/status').then(r=>r.json()).then(d=>{
+    $('#dot').classList.toggle('on', !!d.comfy);
+    $('#statustxt').textContent = FREEMSG ? FREEMSG
+      : (d.comfy ? 'MiniMax backend ready' : 'backend stopped (starts on generate)');
+  }).catch(()=>{ $('#statustxt').textContent = 'studio server not reachable'; });
+}
+status(); setInterval(status, 6000);
+
+$('#modelpick').addEventListener('click', e=>{
+  const b = e.target.closest('.ratio'); if(!b) return;
+  document.querySelectorAll('#modelpick .ratio').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  $('#modelhint').textContent = 'MiniMax H3 · local · text and image to video with audio.';
+});
+
+$('#vmode').addEventListener('click', e=>{
+  const b = e.target.closest('.ratio'); if(!b) return;
+  document.querySelectorAll('#vmode .ratio').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  VMODE = b.dataset.mode;
+  $('#i2v-box').style.display = VMODE === 'i2v' ? '' : 'none';
+  $('#ref-box').style.display = (VMODE === 'ref' || VMODE === 'orbit') ? '' : 'none';
+  // 360 Orbit writes its own prompt and has a fixed length; reference audio + chaining don't apply.
+  const orbit = VMODE === 'orbit';
+  $('#orbit-box').style.display = orbit ? '' : 'none';
+  [$('#prompt'), $('#prompt').previousElementSibling, $('#seconds').closest('.slider-row'),
+   $('#seconds').closest('.slider-row').previousElementSibling, $('#lenhint')].forEach(e => e.style.display = orbit ? 'none' : '');
+  $('#ref-extras').style.display = orbit ? 'none' : '';
+  // 🔴 Was applyTemplate(false) — it rewrote the prompt box on EVERY mode switch,
+  //    so the user had to delete the template before every new prompt. The template is
+  //    now opt-in only, via the "insert template" link. (2026-09-22)
+});
+
+$('#vratio').addEventListener('click', e=>{
+  const b = e.target.closest('.ratio'); if(!b) return;
+  document.querySelectorAll('#vratio .ratio').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  VW = +b.dataset.w; VH = +b.dataset.h;
+  $('#dimhint').textContent = VW + ' × ' + VH;
+  cropNote();
+});
+
+$('#seconds').addEventListener('input', e=>{
+  // Mirror the server's 17n+5 snap so the label is honest.
+  let n = Math.max(5, Math.round(e.target.value * 24));
+  while(n % 17 !== 5) n++;
+  $('#secv').textContent = (n/24).toFixed(1) + 's';
+});
+
+// ---- Fill-in-the-blank prompt templates, one per mode ----
+// Field names and section ORDER are from MiniMax's official spec. They are strict:
+// renaming a field or reordering sections silently degrades the result.
+const TEMPLATES = {
+t2v: `integrated_multimodal_description: [Shot 1] Live-action, cinematic, WHAT KIND OF SHOT (wide / medium / close-up) of WHAT SUBJECT, in WHAT PLACE. WHAT GRADE AND LIGHT (e.g. warm golden-hour grade, fine grain, soft highlight halation).
+
+COMPOSITION LOCK - keep these absolutely fixed for the whole clip, no warping, no drift, no re-framing: LIST EACH FIXED ELEMENT WITH ITS ATTRIBUTES AND POSITION, e.g. "the low far shoreline running across the middle of the frame; the wooden dock pilings in the lower right".
+
+The camera is WHAT THE CAMERA DOES (a static locked-off tripod shot: it never pans, tilts, zooms, dollies or cuts).
+
+[0 to 2 seconds] WHAT MOVES, and how slowly.
+
+[2 to 4 seconds] WHAT MOVES NEXT.
+
+[4 to 5 seconds] HOW IT SETTLES. Everything is exactly where it started.
+
+Motion discipline: every moving element moves at true real-world speed in real time. No time-lapse, no fast motion, no speed ramp. No people, no vehicles, no on-screen text, no lens flare, no cuts, no scene change, no camera movement.
+
+overall_soundscape: WHAT YOU HEAR, quietly and specifically.
+
+non_diegetic_music: N/A`,
+
+i2v: `integrated_multimodal_description: [Shot 1] Live-action, cinematic, a WHAT KIND OF SHOT of the scene shown in <Picture 1>, and no other location. WHAT GRADE AND LIGHT.
+
+COMPOSITION LOCK - keep every one of these absolutely fixed for the entire clip, identical in position, scale and shape: LIST THE THINGS FROM THE PHOTO THAT MUST NOT MOVE OR CHANGE.
+
+The camera is WHAT THE CAMERA DOES. The framing at the last frame is the same as the first.
+
+[0 to 2 seconds] WHAT MOVES.
+
+[2 to 4 seconds] WHAT MOVES NEXT.
+
+[4 to 5 seconds] HOW IT SETTLES.
+
+Motion discipline: real-world speed, real time. No time-lapse, no speed ramp, no cuts, no scene change.
+
+overall_soundscape: WHAT YOU HEAR.
+
+non_diegetic_music: N/A`,
+
+ref: `subject_definitions:
+<Subject 1> is WHAT IT IS, shown in <Picture 1>: DESCRIBE IT IN DETAIL - material, colour, texture, arrangement, every part that must survive.
+<Subject 2> is WHAT IT IS, shown in <Picture 2>: DESCRIBE IT IN DETAIL - the surfaces, the furniture, the lighting, the background, anything that identifies the place.
+
+summary:
+[reference generation] A single live-action shot placing <Subject 1> within <Subject 2>, preserving SAY WHAT MUST BE PRESERVED.
+
+retention_analysis:
+<Subject 1> is fully_preserved: LIST WHAT CARRIES OVER UNCHANGED.
+<Subject 2> is fully_preserved: LIST WHAT CARRIES OVER UNCHANGED.
+
+detailed_description:
+[Shot 1] Live-action, photographic, cinematic, WHAT GRADE AND LIGHT. A single locked-off WHAT KIND OF shot. <Subject 1> sits WHERE IN THE FRAME, viewed from WHAT ANGLE. Behind it, slightly out of focus, <Subject 2> recedes: NAME THE BACKGROUND ELEMENTS. The camera is a static locked-off tripod shot: it never pans, tilts, zooms, dollies or cuts, and the framing at the last frame is identical to the first. COMPOSITION LOCK, held absolutely fixed for the entire clip: LIST EVERY ELEMENT THAT MUST NOT DRIFT.
+
+[0 to 2 seconds] WHAT MOVES, slightly.
+
+[2 to 4 seconds] WHAT MOVES NEXT.
+
+[4 to 5 seconds] HOW IT SETTLES. Everything is exactly where it started.
+
+Motion discipline: real-world speed, real time. No time-lapse, no speed ramp, no people, no hands, no on-screen text, no cuts, no camera movement.
+
+overall_soundscape:
+WHAT YOU HEAR.
+
+non_diegetic_music:
+N/A`
+};
+// A prompt counts as "untouched" if it is byte-identical to a template, so
+// switching modes never destroys something the user actually wrote.
+function isTemplate(t){ return Object.values(TEMPLATES).some(v => v === t); }
+function applyTemplate(force){
+  const box = $('#prompt');
+  if(force || !box.value.trim() || isTemplate(box.value)){
+    box.value = TEMPLATES[VMODE] || '';
+  }
+}
+$('#tmpl').addEventListener('click', ()=>{
+  const box = $('#prompt');
+  if(box.value.trim() && !isTemplate(box.value)
+     && !confirm('Replace what you have written with the blank template?')) return;
+  applyTemplate(true);
+});
+
+// ---- chain projects -------------------------------------------------------
+// Each project has its own latent folder. Populate the picker from disk and show
+// how many slots it already has, so the user never has to remember the next number.
+let CHAINS = [];
+async function loadChains(){
+  try{
+    const r = await fetch('/api/chains'); const d = await r.json();
+    CHAINS = d.chains || [];
+    $('#chainlist').innerHTML = CHAINS.map(c=>`<option value="${c.id}">`).join('');
+    chainStatus();
+  }catch(e){ /* non-fatal */ }
+}
+function chainStatus(){
+  const id = ($('#chainproject').value || 'h3_context').trim();
+  const c = CHAINS.find(x => x.id === id || x.id === 'h3_context-' + id);
+  const el = $('#chainstatus');
+  if(c && c.slots){
+    el.innerHTML = `<b>${c.id}</b> &mdash; ${c.slots} clip(s) saved, highest is ${c.highest}. `
+                 + `<b>Next clip = ${c.next}.</b>`;
+  } else {
+    el.textContent = `New project "${id}" — nothing saved yet, so start the chain at 1.`;
+  }
+}
+$('#chainproject').addEventListener('input', chainStatus);
+$('#chainproject').addEventListener('change', chainStatus);
+loadChains();
+
+$('#camera').addEventListener('change', e=>{
+  const on = e.target.checked;
+  $('#camrow').style.display = on ? '' : 'none';
+  $('#camhint').style.display = on ? '' : 'none';
+});
+$('#camstr').addEventListener('input', e=>{ $('#camstrv').textContent = (+e.target.value).toFixed(2); });
+
+// VREFS is [{name, data}] in <Picture N> order. Picking files APPENDS — the old
+// handler reset the array on every change, so adding a second image one at a time
+// silently threw the first one away and forced ctrl-click-everything-at-once.
+const REF_MAX = 9;
+$('#reffiles').addEventListener('change', e=>{
+  const picked = Array.from(e.target.files);
+  e.target.value = '';                       // so re-picking the SAME file still fires change
+  const room = REF_MAX - VREFS.length;
+  if(room <= 0){ $('#err').textContent = 'Ref2VA accepts at most ' + REF_MAX + ' images.'; return; }
+  if(picked.length > room) $('#err').textContent =
+    'Only room for ' + room + ' more — the rest were ignored.';
+  // Read in parallel but place by index, so the thumbnails land in the order picked
+  // no matter which FileReader finishes first.
+  const batch = picked.slice(0, room);
+  const base = VREFS.length;
+  let pending = batch.length;
+  batch.forEach((f, i) => {
+    const rd = new FileReader();
+    rd.onload = () => {
+      VREFS[base + i] = {name: f.name, data: rd.result};
+      if(--pending === 0) drawRefs();
+    };
+    rd.readAsDataURL(f);
+  });
+});
+
+// AREFS is [{name, data}] in <Audio N> order. Same append-not-replace rule as
+// images. H3 takes at most 3 audio references.
+const AREF_MAX = 3;
+const AREFS = [];
+$('#refaudiofiles').addEventListener('change', e=>{
+  const picked = Array.from(e.target.files);
+  e.target.value = '';
+  const room = AREF_MAX - AREFS.length;
+  if(room <= 0){ $('#err').textContent = 'Ref2VA accepts at most ' + AREF_MAX + ' audio clips.'; return; }
+  if(picked.length > room) $('#err').textContent =
+    'Only room for ' + room + ' more audio clip(s) — the rest were ignored.';
+  const batch = picked.slice(0, room);
+  const base = AREFS.length;
+  let pending = batch.length;
+  batch.forEach((f, i) => {
+    const rd = new FileReader();
+    rd.onload = () => {
+      AREFS[base + i] = {name: f.name, data: rd.result};
+      if(--pending === 0) drawAudioRefs();
+    };
+    rd.readAsDataURL(f);
+  });
+});
+
+function drawAudioRefs(){
+  const list = $('#refaudiolist');
+  list.innerHTML = AREFS.map((r, i) => (
+    '<div style="display:flex;align-items:center;gap:8px;margin:6px 0">' +
+      '<span class="refnum" style="position:static" title="cite this as &lt;Audio ' + (i+1) + '&gt;">' + (i+1) + '</span>' +
+      '<audio controls preload="metadata" src="' + r.data + '" style="height:32px;flex:1;min-width:0"></audio>' +
+      '<span class="refname" style="position:static;max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + r.name + '">' + r.name + '</span>' +
+      '<button class="refdel" style="position:static" data-adel="' + i + '" title="remove">&times;</button>' +
+    '</div>'
+  )).join('') + (AREFS.length < AREF_MAX
+    ? '<div class="addref" id="addaudioref" style="display:inline-flex" title="add reference audio">+</div>' : '');
+
+  const add = $('#addaudioref');
+  if(add) add.addEventListener('click', ()=> $('#refaudiofiles').click());
+  list.querySelectorAll('[data-adel]').forEach(b => b.addEventListener('click', ()=>{
+    AREFS.splice(+b.dataset.adel, 1); drawAudioRefs();
+  }));
+}
+drawAudioRefs();
+
+function drawRefs(){
+  const list = $('#reflist');
+  list.innerHTML = VREFS.map((r, i) => (
+    '<div class="refitem">' +
+      '<div class="refnum" title="cite this as &lt;Picture ' + (i+1) + '&gt;">' + (i+1) + '</div>' +
+      '<button class="refdel" data-del="' + i + '" title="remove">&times;</button>' +
+      '<img src="' + r.data + '" alt="">' +
+      '<div class="refmove">' +
+        '<button data-mv="' + i + '" data-dir="-1"' + (i === 0 ? ' disabled' : '') + ' title="move earlier">&#9664;</button>' +
+        '<button data-mv="' + i + '" data-dir="1"' + (i === VREFS.length-1 ? ' disabled' : '') + ' title="move later">&#9654;</button>' +
+      '</div>' +
+      '<div class="refname" title="' + r.name + '">' + r.name + '</div>' +
+    '</div>'
+  )).join('') + (VREFS.length < REF_MAX
+    ? '<div class="addref" id="addref" title="add reference images">+</div>' : '');
+
+  const add = $('#addref');
+  if(add) add.addEventListener('click', ()=> $('#reffiles').click());
+  list.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', ()=>{
+    VREFS.splice(+b.dataset.del, 1); drawRefs();
+  }));
+  list.querySelectorAll('[data-mv]').forEach(b => b.addEventListener('click', ()=>{
+    const i = +b.dataset.mv, j = i + (+b.dataset.dir);
+    if(j < 0 || j >= VREFS.length) return;
+    [VREFS[i], VREFS[j]] = [VREFS[j], VREFS[i]];
+    drawRefs();
+  }));
+}
+drawRefs();
+
+$('#i2vfile').addEventListener('change', e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const rd = new FileReader();
+  rd.onload = () => { VIMG = rd.result; cropNote(); };
+  rd.readAsDataURL(f);
+});
+// Oct 5 2026: the server center-crops the start image to the video's exact shape (H3 would
+// otherwise STRETCH it). Say up front what gets trimmed. Same math as server.py /api/video.
+function cropNote(){
+  const el = $('#i2vcrop'); if(!el) return;
+  if(!VIMG){ el.textContent = ''; return; }
+  const im = new Image();
+  im.onload = () => {
+    const sw = im.naturalWidth, sh = im.naturalHeight;
+    let cw, ch;
+    if(sw / sh > VW / VH){ cw = Math.round(sh * VW / VH); ch = sh; } else { cw = sw; ch = Math.round(sw * VH / VW); }
+    const lost = 1 - (cw * ch) / (sw * sh);
+    el.textContent = lost < 0.005
+      ? 'Start image ' + sw + '×' + sh + ' already matches the video shape (' + VW + '×' + VH + ').'
+      : 'Start image ' + sw + '×' + sh + ' will be center-cropped to ' + cw + '×' + ch + ' (trims '
+        + Math.round(lost * 100) + '% off the ' + (cw < sw ? 'sides' : 'top and bottom') + ') to fit ' + VW + '×' + VH + ', never stretched.';
+  };
+  im.src = VIMG;
+}
+
+function setBusy(on, msg){
+  BUSY = on;
+  $('#gen').disabled = on; $('#upscale').disabled = on; $('#igen').disabled = on; $('#ivert').disabled = on || !ILAST; $('#iup').disabled = on || !ILAST; $('#iupload').disabled = on;
+  if(on){
+    $('#viewer').innerHTML = '<div class="placeholder"><div class="spinner"></div>' + (msg||'working…') + '</div>';
+  }
+}
+function showVideo(url, meta){
+  $('#viewer').innerHTML = '<video src="'+url+'" controls autoplay loop muted></video>'
+    + (meta ? '<div class="meta">'+meta+'</div>' : '');
+}
+function showImage(url, meta){
+  $('#viewer').innerHTML = '<img src="'+url+'" alt="">'
+    + (meta ? '<div class="meta">'+meta+'</div>' : '');
+}
+function fail(e){
+  $('#err').textContent = e;
+  $('#viewer').innerHTML = '<div class="placeholder">That run did not finish.</div>';
+}
+
+$('#gen').addEventListener('click', async ()=>{
+  const prompt = $('#prompt').value.trim();
+  $('#err').textContent = '';
+  if(!prompt && VMODE !== 'orbit'){ fail('Write a prompt first.'); return; }
+  if(VMODE === 'orbit' && VREFS.length !== 1 && VREFS.length !== 3){ fail('360 Orbit takes 1 photo, or 3 (front, then 120° and 240° around).'); return; }
+  if(VMODE === 'i2v' && !VIMG){ fail('Image to Video needs an input image.'); return; }
+  if(VMODE === 'ref' && !VREFS.length){ fail('Reference mode needs at least one image.'); return; }
+  if(/[A-Z]{3,}/.test(prompt) && !confirm('The prompt still has TEMPLATE PLACEHOLDERS in caps. Generate anyway?')) return;
+  setBusy(true, VMODE === 'orbit' ? 'rendering a 360 orbit (ORB360)… about 12 min' : 'generating on MiniMax H3… first run loads a 10GB model');
+  try{
+    const r = await fetch('/api/video', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({mode:VMODE, prompt, width:VW, height:VH,
+        seconds: parseFloat($('#seconds').value), seed: parseInt($('#seed').value || '-1'),
+        image: VMODE === 'i2v' ? VIMG : null,
+        images: (VMODE === 'ref' || VMODE === 'orbit') ? VREFS.map(r => r.data) : null,
+        audios: VMODE === 'ref' ? AREFS.map(r => ({name: r.name, data: r.data})) : null,
+        chain_index: VMODE === 'ref' ? (+$('#chainindex').value || 0) : 0,
+        chain_project: VMODE === 'ref' ? ($('#chainproject').value || 'h3_context') : null,
+        camera_motion: $('#camera').checked,
+        camera_strength: parseFloat($('#camstr').value)})});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || 'generation failed');
+    LAST = d.url.split('/').pop();
+    showVideo(d.url + '?t=' + Date.now(), d.seconds + 's · ' + d.frames + ' frames · seed ' + d.seed + ' · ' + d.took + 's'
+      + (d.start_crop && d.start_crop.trimmed ? ' · start image cropped ' + d.start_crop.from.join('×') + ' → ' + d.start_crop.to.join('×') : ''));
+    loadGallery();
+  }catch(e){ fail(e.message); }
+  setBusy(false);
+});
+
+async function runUpscale(payload, label){
+  $('#err').textContent = '';
+  setBusy(true, label);
+  try{
+    payload.interpolate = $('#interp').checked;
+    payload.fast = $('#vfast').checked;
+    const r = await fetch('/api/upscale', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || 'upscale failed');
+    LAST = d.url.split('/').pop();
+    showVideo(d.url + '?t=' + Date.now(), 'upscaled (' + (d.upscaler === 'seedvr2' ? 'SeedVR2' : 'ESRGAN') + ') · ' + d.fps + 'fps · ' + d.took + 's');
+    loadGallery();
+  }catch(e){ fail(e.message); }
+  setBusy(false);
+}
+
+$('#upscale').addEventListener('click', ()=>{
+  if(!LAST){ $('#vidfile').click(); return; }   // nothing generated yet -> browse
+  runUpscale({last: LAST}, 'upscaling the last clip' + ($('#vfast').checked ? ' (fast)…' : ' with SeedVR2… about 5–6 min per 5 s clip'));
+});
+$('#browse').addEventListener('click', ()=> $('#vidfile').click());
+
+// ---------------- Slow down 2x (RIFE + same fps = double length), Oct 10 2026 ----------------
+async function runSlowmo(payload, label){
+  $('#err').textContent = '';
+  setBusy(true, label);
+  try{
+    const r = await fetch('/api/slowmo', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || 'slow-down failed');
+    LAST = d.url.split('/').pop();
+    showVideo(d.url + '?t=' + Date.now(), 'slowed 2× · ' + d.seconds + 's · ' + d.fps + 'fps · ' + (d.audio ? 'audio stretched' : 'no audio') + ' · ' + d.took + 's');
+    loadGallery();
+  }catch(e){ fail(e.message); }
+  setBusy(false);
+}
+$('#slowmo').addEventListener('click', ()=>{
+  if(!LAST){ $('#slowfile').click(); return; }
+  runSlowmo({last: LAST}, 'slowing the clip down 2× (RIFE)… about a minute');
+});
+$('#slowbrowse').addEventListener('click', ()=> $('#slowfile').click());
+$('#slowfile').addEventListener('change', e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const rd = new FileReader();
+  rd.onload = () => runSlowmo({video: rd.result, filename: f.name}, 'slowing ' + f.name + ' down 2× (RIFE)… about a minute');
+  rd.readAsDataURL(f);
+  e.target.value = '';
+});
+$('#vidfile').addEventListener('change', e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const rd = new FileReader();
+  rd.onload = () => runUpscale({video: rd.result, filename: f.name}, 'upscaling ' + f.name + ($('#vfast').checked ? ' (fast)…' : ' with SeedVR2… about 5–6 min per 5 s clip'));
+  rd.readAsDataURL(f);
+  e.target.value = '';
+});
+
+function loadGallery(){
+  // The strip always mirrors the tab you are on: clips under Video, stills under Image.
+  const img = TAB === 'image';
+  fetch('/api/gallery?kind=' + (img ? 'image' : 'video')).then(r=>r.json()).then(d=>{
+    const base = img ? '/images/' : '/outputs/';
+    $('#gallery').innerHTML = (d.files||[]).map(f => img
+      ? '<img src="'+base+encodeURIComponent(f)+'" loading="lazy" title="'+f+'" alt="">'
+      : '<video src="'+base+encodeURIComponent(f)+'" muted preload="metadata" title="'+f+'"></video>'
+    ).join('');
+    document.querySelectorAll('#gallery video, #gallery img').forEach(v=>{
+      v.addEventListener('click', ()=>{
+        const name = decodeURIComponent(v.src.split('/').pop());
+        if(img){ ILAST = name; showImage(v.src, name); paintCrop(); }
+        else   { LAST  = name; showVideo(v.src, name); }
+      });
+    });
+  }).catch(()=>{});
+}
+loadGallery();
+
+// ---------------- Video / Image tabs ----------------
+$('#tabs').addEventListener('click', e=>{
+  const b = e.target.closest('.tab'); if(!b || BUSY) return;
+  if(b.dataset.tab === TAB) return;            // re-clicking the live tab frees nothing
+  document.querySelectorAll('#tabs .tab').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  TAB = b.dataset.tab;
+  $('#video-panel').style.display = TAB === 'video' ? 'flex' : 'none';
+  $('#image-panel').style.display = TAB === 'image' ? 'flex' : 'none';
+  $('#viewer').innerHTML = '<div class="placeholder">Nothing generated yet.</div>';
+  loadGallery();
+  freeVram();
+});
+
+// H3 (~15GB peak) and Krea 2 (~12.7GB resident) cannot both sit on a 16GB card, and
+// ComfyUI holds the last model until something needs the room. Switching tabs is the
+// one moment we know the OTHER model is about to be wanted, so drop the weights now.
+// Fire-and-forget: it must never block the UI, and it never starts a stopped backend.
+function freeVram(){
+  fetch('/api/free', {method:'POST'}).then(r=>r.json()).then(d=>{
+    if(d.freed_mib == null) return;            // backend was not running — nothing held
+    FREEMSG = d.freed_mib > 200
+      ? 'freed ' + (d.freed_mib/1024).toFixed(1) + ' GB of VRAM'
+      : 'VRAM already clear';
+    status();
+    setTimeout(()=>{ FREEMSG = null; status(); }, 6000);
+  }).catch(()=>{});
+}
+
+// ---------------- Krea 2 Turbo ----------------
+$('#iratio').addEventListener('click', e=>{
+  const b = e.target.closest('.ratio'); if(!b) return;
+  document.querySelectorAll('#iratio .ratio').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  IW = +b.dataset.w; IH = +b.dataset.h;
+  $('#idimhint').textContent = IW + ' × ' + IH;
+  paintSteps();
+});
+
+// Flux2Scheduler takes 1..4096. Linear would put 15 steps under every pixel of
+// travel, so the slider is log-mapped: position 0..1000 -> 4096^(pos/1000).
+const STEP_MAX = 4096;
+const posToSteps = v => Math.max(1, Math.min(STEP_MAX, Math.round(Math.pow(STEP_MAX, v/1000))));
+function estimate(steps){
+  // Measured on this card at 1216x832: 8->15s, 20->27s, 32->42s. Scale by area.
+  const secs = (6 + 1.15 * steps) * ((IW*IH) / (1216*832));
+  return secs < 90 ? Math.round(secs) + 's' : (secs/60).toFixed(1) + ' min';
+}
+function paintSteps(){
+  const n = posToSteps(+$('#steps').value);
+  $('#stepsv').textContent = n;
+  const note = n < 12 ? 'fast, fine for stylised work'
+             : n < 26 ? 'sharp — the photoreal sweet spot'
+             : n < 50 ? 'maximum detail'
+                      : 'well past diminishing returns on a turbo model';
+  $('#stepshint').innerHTML = '&asymp;' + estimate(n) + ' &middot; ' + note +
+    '. Flux2Scheduler accepts 1&ndash;4096, so the slider is logarithmic &mdash; a linear one ' +
+    'would skip 15 steps per pixel. Measured at 1216&times;832: <b>8</b> waxy skin and mushy ' +
+    'wood (15s) &middot; <b>20</b> real skin texture, wood grain, correct glass refraction ' +
+    '(27s) &middot; <b>32</b> label and surface-grain detail (42s). Stylised work (comic, ' +
+    'poster, illustration) is already excellent at 8.';
+}
+$('#steps').addEventListener('input', paintSteps);
+paintSteps();
+
+// Fill-in-the-blank template for stills, same idea as the video ones.
+const ITEMPLATE = `WHAT KIND OF SHOT (wide / medium / close-up / overhead) of WHAT SUBJECT, WHERE.
+
+Subject: DESCRIBE THE SUBJECT — what it is made of, its colour, its texture, its condition, what it is doing.
+
+Setting: WHAT IS AROUND IT and WHAT IS BEHIND IT, and how far out of focus the background falls.
+
+Light: WHERE THE LIGHT COMES FROM and WHAT QUALITY IT HAS (hard noon sun / overcast softbox / low golden-hour rake / single warm practical).
+
+Camera: shot on a WHAT CAMERA BODY with a WHAT MM LENS at f/WHAT, THE EXPOSURE DECISION (e.g. exposed for the highlights so the shadows fall away).
+
+Finish: unretouched, straight out of camera, visible sensor noise in the shadows, real skin texture with pores and fine lines, no beauty retouching, no plastic sheen.`;
+$('#itmpl').addEventListener('click', ()=>{
+  const box = $('#iprompt');
+  if(box.value.trim() && box.value !== ITEMPLATE
+     && !confirm('Replace what you have written with the blank template?')) return;
+  box.value = ITEMPLATE;
+});
+
+$('#igen').addEventListener('click', async ()=>{
+  if(IMODE === 'angles') return runAngles();
+  const prompt = $('#iprompt').value.trim();
+  $('#ierr').textContent = '';
+  if(!prompt){ $('#ierr').textContent = 'Write a prompt first.'; return; }
+  if(/[A-Z]{3,}/.test(prompt) && !confirm('The prompt still has TEMPLATE PLACEHOLDERS in caps. Generate anyway?')) return;
+  const steps = posToSteps(+$('#steps').value);
+  if(IMODE !== 'text' && !ISRC_DATA && !ISRC_NAME){ $('#ierr').textContent = 'Add an input image first.'; return; }
+  const label = {text:'', img2img:' (image to image)', reference:' (style reference)', identity:' (identity)', edit:' (Qwen edit)'}[IMODE];
+  const qwen = IMODEL === 'qwen21', trans = qwen && $('#itrans').checked;
+  setBusy(true, qwen ? (IMODE === 'edit' ? 'editing with Qwen 2.1' : 'generating on Qwen 2.1') + (trans ? ' (transparent)' : '') + '… about 30 s'
+    : IMODE === 'edit' ? 'editing with Qwen-Image-Edit… about 25 s' : 'generating on Krea 2 Turbo' + label + '… ' + steps + ' steps');
+  try{
+    const r = await fetch('/api/image', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({prompt, width:IW, height:IH, steps,
+        seed: parseInt($('#iseed').value || '-1'),
+        prompt_weight: $('#pweight').checked,
+        mode: IMODE,
+        model: IMODEL, transparent: trans,
+        extra_images: qwen && IMODE === 'edit' ? IEXTRA : [],
+        image: IMODE !== 'text' ? ISRC_DATA : null,
+        source: IMODE !== 'text' ? ISRC_NAME : null,
+        denoise: +$('#idenoise').value / 100})});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || 'generation failed');
+    ILAST = d.url.split('/').pop();
+    paintCrop();
+    showImage(d.url + '?t=' + Date.now(),
+      d.width + '×' + d.height + ' · ' + d.steps + ' steps · seed ' + d.seed + ' · ' + d.took + 's'
+      + (d.mode && d.mode !== 'text' ? ' · ' + d.mode + (d.denoise ? ' ' + d.denoise : '') : '')
+      + (d.model === 'qwen21' ? ' · Qwen 2.1' + (d.refs > 1 ? ' · ' + d.refs + ' refs' : '') + (d.transparent ? ' · transparent' : '') : ''));
+    loadGallery();
+  }catch(e){
+    $('#ierr').textContent = e.message;
+    $('#viewer').innerHTML = '<div class="placeholder">That run did not finish.</div>';
+  }
+  setBusy(false);
+});
+
+// ---------------- Image to Image / Reference, Oct 4 2026 ----------------
+let IMODE = 'text', ISRC_DATA = null, ISRC_NAME = null;
+document.querySelectorAll('#imode .ratio').forEach(el => el.addEventListener('click', () => {
+  document.querySelectorAll('#imode .ratio').forEach(x => x.classList.remove('active'));
+  el.classList.add('active'); IMODE = el.dataset.mode;
+  paintModel();
+  $('#isrc-box').style.display = IMODE === 'text' ? 'none' : 'block';
+  $('#idenoise-box').style.display = IMODE === 'img2img' ? 'block' : 'none';
+  $('#iref-note').style.display = IMODE === 'reference' ? 'block' : 'none';
+  $('#iid-note').style.display = IMODE === 'identity' ? 'block' : 'none';
+  $('#iedit-note').style.display = IMODE === 'edit' ? 'block' : 'none';
+  $('#iratio').style.opacity = (IMODE === 'img2img' || IMODE === 'edit') ? '0.4' : '1';
+  paintAngleMode();
+}));
+function setSrcThumb(url){ const t = $('#isrcthumb'); t.src = url; t.style.display = 'block'; }
+$('#isrcfile').addEventListener('change', e => {
+  const f = e.target.files[0]; if(!f) return;
+  const rd = new FileReader();
+  rd.onload = () => { ISRC_DATA = rd.result; ISRC_NAME = null; setSrcThumb(rd.result);
+    $('#isrchint').textContent = f.name + ' selected.'; };
+  rd.readAsDataURL(f);
+});
+$('#isrcscreen').addEventListener('click', () => {
+  if(!ILAST){ $('#ierr').textContent = 'Generate an image or click one in the strip below first.'; return; }
+  ISRC_NAME = ILAST; ISRC_DATA = null; setSrcThumb('/images/' + ILAST + '?t=' + Date.now());
+  $('#isrcfile').value = '';
+  $('#isrchint').textContent = ILAST + ' selected.';
+});
+const paintDenoise = () => { $('#idenoisev').textContent = (+$('#idenoise').value / 100).toFixed(2); };
+$('#idenoise').addEventListener('input', paintDenoise); paintDenoise();
+
+// ---------------- Qwen 2.1 model, Oct 9 2026 ----------------
+// Krea 2 Turbo keeps every mode. Qwen 2.1 only has Text and Edit (multi-reference),
+// a fixed 8 steps, and a real-alpha transparent option.
+let IMODEL = 'krea2', IEXTRA = [];
+const KREA_HINT = $('#imodelhint').innerHTML;
+function paintModel(){
+  const qwen = IMODEL === 'qwen21';
+  document.querySelectorAll('#imode .ratio').forEach(x => {
+    const ok = (!qwen || x.dataset.mode === 'text' || x.dataset.mode === 'edit');
+    x.style.display = ok ? '' : 'none';
+  });
+  $('#imodelhint').innerHTML = qwen
+    ? 'Qwen Image 2.1 + turbo LoRA, INT8, local. 8 steps, no negative prompt.'
+    : KREA_HINT;
+  $('#itrans-box').style.display = qwen ? 'flex' : 'none';
+  $('#iextra-box').style.display = qwen && IMODE === 'edit' ? 'block' : 'none';
+  $('#iqwen-note').style.display = qwen ? 'block' : 'none';
+  const sr = $('#steps').closest('.slider-row');
+  [sr, sr.previousElementSibling, $('#stepshint')].forEach(e => e.style.display = qwen ? 'none' : '');
+}
+$('#imodel').addEventListener('click', e => {
+  const b = e.target.closest('.ratio'); if(!b || BUSY) return;
+  document.querySelectorAll('#imodel .ratio').forEach(x => x.classList.remove('active'));
+  b.classList.add('active'); IMODEL = b.dataset.model;
+  if((IMODEL === 'qwen21' && IMODE !== 'text' && IMODE !== 'edit') || (IMODEL !== 'krea2' && IMODE === 'angles'))
+    document.querySelector('#imode .ratio[data-mode="text"]').click();
+  else { paintModel(); document.querySelector('#imode .ratio.active').click(); }
+});
+$('#iextra').addEventListener('change', e => {
+  const files = [...e.target.files].slice(0, 9); IEXTRA = [];
+  if(!files.length){ $('#iextrahint').textContent = 'No extra references.'; return; }
+  let n = 0;
+  files.forEach((f, i) => { const rd = new FileReader();
+    rd.onload = () => { IEXTRA[i] = rd.result;
+      if(++n === files.length) $('#iextrahint').textContent = files.length + ' extra reference' + (files.length > 1 ? 's' : '')
+        + ' added (images 2–' + (files.length + 1) + '): ' + files.map(f => f.name).join(', '); };
+    rd.readAsDataURL(f); });
+});
+
+// ---------------- Make it vertical (crop + SeedVR2; was RealESRGAN x4 until Oct 5), Oct 4 2026 ----------------
+let VRATIO = '9:16', VSRC = null;
+const VASPECT = {'9:16': 9/16, '4:5': 4/5};
+function cropRect(w, h){
+  // Same math as /api/vertical in server.py, so the preview box is exactly what you get.
+  const a = VASPECT[VRATIO], pos = +$('#vpos').value / 100;
+  if(w / h > a){ const cw = Math.round(h * a); return [Math.round((w - cw) * pos), 0, cw, h]; }
+  const ch = Math.round(w / a); return [0, Math.round((h - ch) * pos), w, ch];
+}
+function paintCrop(){
+  const v = +$('#vpos').value;
+  $('#vposv').textContent = v === 50 ? 'center' : (v < 50 ? v + '% (left)' : v + '% (right)');
+  if(!ILAST){ return; }
+  $('#ivert').disabled = false; $('#iup').disabled = BUSY;
+  const draw = () => {
+    const c = $('#vprev'), w = VSRC.naturalWidth, h = VSRC.naturalHeight;
+    c.width = 480; c.height = Math.round(480 * h / w); c.style.display = 'block';
+    const g = c.getContext('2d'), k = c.width / w, [x, y, cw, ch] = cropRect(w, h);
+    g.drawImage(VSRC, 0, 0, c.width, c.height);
+    g.fillStyle = 'rgba(0,0,0,0.6)';
+    g.fillRect(0, 0, c.width, y * k); g.fillRect(0, (y + ch) * k, c.width, c.height);
+    g.fillRect(0, y * k, x * k, ch * k); g.fillRect((x + cw) * k, y * k, c.width, ch * k);
+    g.strokeStyle = '#fff'; g.lineWidth = 2; g.strokeRect(x * k + 1, y * k + 1, cw * k - 2, ch * k - 2);
+    $('#vhint').textContent = 'Crop ' + cw + '×' + ch + ' from ' + w + '×' + h + ', upscaled to '
+      + (VRATIO === '9:16' ? '1080×1920' : '1080×1350') + '.';
+  };
+  if(VSRC && VSRC.dataset.name === ILAST && VSRC.complete){ draw(); return; }
+  VSRC = new Image(); VSRC.dataset.name = ILAST; VSRC.onload = draw;
+  VSRC.src = '/images/' + encodeURIComponent(ILAST);
+}
+$('#cropratio').addEventListener('click', e=>{
+  const b = e.target.closest('.ratio'); if(!b) return;
+  document.querySelectorAll('#cropratio .ratio').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); VRATIO = b.dataset.r; paintCrop();
+});
+$('#vpos').addEventListener('input', paintCrop);
+$('#ivert').addEventListener('click', async ()=>{
+  if(!ILAST) return;
+  $('#verr').textContent = '';
+  setBusy(true, 'cropping to ' + VRATIO + ' and upscaling with SeedVR2…');
+  try{
+    const r = await fetch('/api/vertical', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name: ILAST, ratio: VRATIO, pos: +$('#vpos').value / 100})});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || 'crop failed');
+    showImage(d.url + '?t=' + Date.now(), d.width + '×' + d.height + ' vertical · ' + d.took + 's');
+    loadGallery();
+  }catch(e){ $('#verr').textContent = e.message; }
+  setBusy(false);
+});
+paintCrop();
+
+// ---------------- SeedVR2 upscale: the viewed image or any upload, Oct 5 2026 ----------------
+let USIZE = '4k';
+$('#usize').addEventListener('click', e=>{
+  const b = e.target.closest('.ratio'); if(!b) return;
+  document.querySelectorAll('#usize .ratio').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); USIZE = b.dataset.s;
+});
+async function runImageUpscale(body, label){   // NOT runUpscale: that name is the video panel's
+  $('#uerr').textContent = '';
+  setBusy(true, 'upscaling ' + label + ' with SeedVR2 (' + (USIZE === '4k' ? '4K' : '2x') + ')… about 20 s');
+  try{
+    const r = await fetch('/api/image-upscale', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(Object.assign({size: USIZE}, body))});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || 'upscale failed');
+    showImage(d.url + '?t=' + Date.now(), d.source[0] + '×' + d.source[1] + ' → ' + d.width + '×' + d.height
+      + ' · SeedVR2 · ' + d.took + 's');
+    loadGallery();
+  }catch(e){ $('#uerr').textContent = e.message; }
+  setBusy(false);
+}
+$('#iup').addEventListener('click', ()=>{ if(ILAST) runImageUpscale({name: ILAST}, ILAST); });
+$('#iupload').addEventListener('click', ()=> $('#iupfile').click());
+$('#iupfile').addEventListener('change', ()=>{
+  const f = $('#iupfile').files[0]; if(!f) return;
+  const rd = new FileReader();
+  rd.onload = () => runImageUpscale({image: rd.result, filename: f.name}, f.name);
+  rd.readAsDataURL(f);
+  $('#iupfile').value = '';
+});
+
+// ---------------- Angles, Oct 17 2026 (fal Multiple Angles LoRA on Qwen Edit 2511) ----------------
+// Every combination of the ticked around / height / distance boxes, rendered one at a time.
+const ANG_LABEL = {'front view':'Front','front-right quarter view':'Front-right','right side view':'Right',
+  'back-right quarter view':'Back-right','back view':'Back','back-left quarter view':'Back-left',
+  'left side view':'Left','front-left quarter view':'Front-left','low-angle shot':'low','eye-level shot':'eye level',
+  'elevated shot':'raised','high-angle shot':'high','close-up':'close','medium shot':'medium','wide shot':'wide'};
+const angPicked = id => [...document.querySelectorAll('#' + id + ' .ratio.active')].map(x => x.dataset.v);
+function angleList(){
+  const out = [];
+  angPicked('iang-az').forEach(az => angPicked('iang-el').forEach(el => angPicked('iang-di').forEach(di =>
+    out.push({azimuth:az, elevation:el, distance:di}))));
+  return out;
+}
+function paintAngleCount(){
+  const n = angleList().length;
+  $('#iang-count').textContent = n ? n + ' angle' + (n > 1 ? 's' : '') + ' \u00b7 about ' + Math.max(1, Math.round(n * 23 / 60)) + ' min'
+    : 'Tick at least one box in each row.';
+}
+['iang-az','iang-el','iang-di'].forEach(id => $('#' + id).addEventListener('click', e => {
+  const b = e.target.closest('.ratio'); if(!b) return; b.classList.toggle('active'); paintAngleCount();
+}));
+function setAng(id, vals){ document.querySelectorAll('#' + id + ' .ratio').forEach(x => x.classList.toggle('active', vals.includes(x.dataset.v))); }
+$('#iang-pre').addEventListener('click', e => {
+  const b = e.target.closest('.ratio'); if(!b) return;
+  if(b.dataset.pre === 'turn'){ setAng('iang-az', Object.keys(ANG_LABEL).slice(0, 8)); setAng('iang-el', ['eye-level shot']); setAng('iang-di', ['medium shot']); }
+  if(b.dataset.pre === 'hero'){ setAng('iang-az', ['front view','front-left quarter view','front-right quarter view']); setAng('iang-el', ['low-angle shot','eye-level shot','high-angle shot']); setAng('iang-di', ['medium shot']); }
+  if(b.dataset.pre === 'clear'){ ['iang-az','iang-el','iang-di'].forEach(id => setAng(id, [])); }
+  paintAngleCount();
+});
+function paintAngleMode(){
+  const on = IMODE === 'angles';
+  $('#iangle-box').style.display = on ? 'block' : 'none';
+  const pr = $('#iprompt'), ra = $('#iratio'), sr = $('#steps').closest('.slider-row');
+  [pr, pr.previousElementSibling, ra, ra.previousElementSibling, $('#idimhint')].forEach(e => e.style.display = on ? 'none' : '');
+  if(IMODEL !== 'qwen21') [sr, sr.previousElementSibling, $('#stepshint')].forEach(e => e.style.display = on ? 'none' : '');
+  $('#igen').textContent = on ? 'Make Angles' : 'Generate Image';
+  if(on) paintAngleCount();
+}
+async function runAngles(){
+  $('#ierr').textContent = '';
+  if(!ISRC_DATA && !ISRC_NAME){ $('#ierr').textContent = 'Add an input image first.'; return; }
+  const list = angleList();
+  if(!list.length){ $('#ierr').textContent = 'Tick at least one box in each row.'; return; }
+  const seed = parseInt($('#iseed').value || '-1');
+  const tag = a => ANG_LABEL[a.azimuth] + ', ' + ANG_LABEL[a.elevation] + ', ' + ANG_LABEL[a.distance];
+  setBusy(true, 'making ' + list.length + ' angle' + (list.length > 1 ? 's' : '') + '…');
+  $('#viewer').innerHTML = '<div class="agrid">' + list.map((a, i) =>
+    '<figure id="ang' + i + '"><div class="pending">' + (i ? 'waiting' : '<div class="spinner"></div>') + '<br>' + tag(a) + '</div></figure>').join('') + '</div>';
+  let done = 0;
+  for(let i = 0; i < list.length; i++){
+    const fig = $('#ang' + i);
+    fig.querySelector('.pending').innerHTML = '<div class="spinner"></div>' + tag(list[i]) + '<br>' + (i + 1) + ' of ' + list.length;
+    try{
+      const r = await fetch('/api/image', {method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(Object.assign({mode:'angles', model:'krea2', prompt:'angles', seed,
+          image: ISRC_DATA, source: ISRC_NAME}, list[i]))});
+      const d = await r.json();
+      if(!r.ok) throw new Error(d.error || 'failed');
+      const url = d.url + '?t=' + Date.now();
+      fig.innerHTML = '<img src="' + url + '" alt=""><figcaption>' + tag(list[i]) + ' \u00b7 ' + d.took + 's</figcaption>';
+      fig.onclick = () => { ILAST = d.url.split('/').pop(); paintCrop(); $('#ivert').disabled = $('#iup').disabled = BUSY;
+        showImage(url, d.width + '\u00d7' + d.height + ' \u00b7 ' + tag(list[i]) + ' \u00b7 seed ' + d.seed + ' \u00b7 click Make Angles again for a new batch'); };
+      ILAST = d.url.split('/').pop(); done++;
+    }catch(e){
+      fig.innerHTML = '<div class="pending">' + tag(list[i]) + '<br>failed: ' + e.message + '</div>';
+    }
+  }
+  BUSY = false;
+  $('#gen').disabled = $('#upscale').disabled = $('#igen').disabled = $('#iupload').disabled = false;
+  $('#ivert').disabled = $('#iup').disabled = !ILAST;
+  if(ILAST) paintCrop();
+  loadGallery();
+  if(done < list.length) $('#ierr').textContent = (list.length - done) + ' of ' + list.length + ' angles failed.';
+}
+</script>
+</body>
+</html>

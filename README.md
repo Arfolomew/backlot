@@ -9,9 +9,9 @@ Built for the Comfy [Open Source Higgsfield](https://www.comfy.org/open-source-h
 
 ## Demo (95 seconds)
 
-[![Backlot demo video](demo/backlot-demo-poster.jpg)](https://github.com/Arfolomew/backlot/blob/main/demo/backlot-demo.mp4)
+[![Backlot demo video](demo/backlot-demo-poster.jpg)](https://demos.onpointfl.com/backlot/)
 
-Click the poster to play the video on GitHub, or [download it](demo/backlot-demo.mp4).
+Click the poster to watch, or [download the MP4](demo/backlot-demo.mp4).
 
 ## What it does
 

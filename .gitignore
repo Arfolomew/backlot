@@ -10,3 +10,4 @@ app/prompts/*.bak*
 demo/*
 !demo/backlot-demo.mp4
 !demo/backlot-demo-poster.jpg
+SUBMISSION.md

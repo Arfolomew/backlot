@@ -159,6 +159,33 @@ def _idle_watchdog():
             print(f"[idle] free failed: {e}", flush=True)
 
 
+# ---------- background jobs ----------
+# Any render endpoint can run as a job: the client sends X-Backlot-Async: 1, gets a job id
+# back at once, and polls /api/jobs/<id>. The handler code is unchanged; in job mode
+# _send() records the response instead of writing it to the socket. This is what lets a
+# 7-minute H3 render survive a reverse proxy's request timeout or a page reload.
+JOBS = {}                      # id -> {"state", "path", "t0", "code", "body", "ctype", "t1"}
+JOBS_LOCK = __import__("threading").Lock()
+JOB_PATHS = {"/api/video", "/api/image", "/api/vertical", "/api/image-upscale",
+             "/api/upscale", "/api/slowmo"}
+JOB_KEEP_SEC = 3600            # finished jobs stay fetchable this long
+
+
+def _new_job(path):
+    jid = base64.urlsafe_b64encode(os.urandom(9)).decode().rstrip("=")
+    with JOBS_LOCK:
+        now = time.time()
+        for k in [k for k, j in JOBS.items() if j.get("t1") and now - j["t1"] > JOB_KEEP_SEC]:
+            del JOBS[k]
+        JOBS[jid] = {"state": "running", "path": path, "t0": now}
+    return jid
+
+
+# Optional HTTP Basic auth, for an instance exposed beyond localhost (BACKLOT_PASSWORD).
+# Any username works; only the password is checked.
+PASSWORD = os.environ.get("BACKLOT_PASSWORD", "")
+
+
 # ---------- backend helpers (all rendering goes through the Comfy SDK) ----------
 def comfy_alive():
     return BACKEND.alive()
@@ -272,6 +299,12 @@ class H(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json"):
         if isinstance(body, str):
             body = body.encode()
+        jid = getattr(self, "_job", None)
+        if jid:
+            with JOBS_LOCK:
+                JOBS[jid].update({"state": "done", "code": code, "body": body,
+                                  "ctype": ctype, "t1": time.time()})
+            return
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -279,8 +312,49 @@ class H(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _authed(self):
+        if not PASSWORD:
+            return True
+        hdr = self.headers.get("Authorization", "")
+        if hdr.startswith("Basic "):
+            try:
+                _, _, pw = base64.b64decode(hdr[6:]).decode().partition(":")
+                if pw == PASSWORD:
+                    return True
+            except Exception:
+                pass
+        body = b'{"error": "password required"}'
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", 'Basic realm="Backlot"')
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        return False
+
     def do_GET(self):
+        if not self._authed():
+            return
         p = urllib.parse.urlparse(self.path)
+        if p.path.startswith("/api/jobs/"):
+            jid = p.path.rsplit("/", 1)[-1]
+            with JOBS_LOCK:
+                j = dict(JOBS.get(jid) or {})
+            if not j:
+                return self._send(404, json.dumps({"error": "no such job"}))
+            if j["state"] != "done":
+                return self._send(202, json.dumps({"job": jid, "state": "running",
+                                                   "elapsed": round(time.time() - j["t0"], 1)}))
+            return self._send(j["code"], j["body"], j["ctype"])
+        if p.path == "/api/jobs":
+            with JOBS_LOCK:
+                out = [{"job": k, "state": j["state"], "path": j["path"],
+                        "elapsed": round((j.get("t1") or time.time()) - j["t0"], 1)}
+                       for k, j in JOBS.items()]
+            return self._send(200, json.dumps(out))
+        if p.path == "/favicon.ico":
+            with open(os.path.join(HERE, "icon", "png", "backlot-32.png"), "rb") as f:
+                return self._send(200, f.read(), "image/png")
         if p.path in ("/", "/index.html"):
             with open(os.path.join(HERE, "index.html"), "rb") as f:
                 return self._send(200, f.read(), "text/html; charset=utf-8")
@@ -346,6 +420,8 @@ class H(BaseHTTPRequestHandler):
         return self._send(404, json.dumps({"error": "not found"}))
 
     def do_POST(self):
+        if not self._authed():
+            return
         p = urllib.parse.urlparse(self.path)
         length = int(self.headers.get("Content-Length", 0))
         if p.path == "/api/closing":
@@ -357,6 +433,32 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, json.dumps({"ok": True}))
         body = json.loads(self.rfile.read(length)) if length else {}
 
+        if p.path in JOB_PATHS and self.headers.get("X-Backlot-Async") == "1":
+            jid = _new_job(p.path)
+            # The worker gets its own shallow copy of this handler so its _send() records
+            # into the job while this request answers 202 on the real socket.
+            worker = __import__("copy").copy(self)
+            worker._job = jid
+
+            def run():
+                try:
+                    worker._dispatch(p, body)
+                    with JOBS_LOCK:
+                        if JOBS[jid]["state"] != "done":   # handler returned without _send
+                            JOBS[jid].update({"state": "done", "code": 500, "t1": time.time(),
+                                              "ctype": "application/json",
+                                              "body": b'{"error": "no response from handler"}'})
+                except Exception as e:
+                    with JOBS_LOCK:
+                        JOBS[jid].update({"state": "done", "code": 500, "t1": time.time(),
+                                          "ctype": "application/json",
+                                          "body": json.dumps({"error": str(e)}).encode()})
+
+            __import__("threading").Thread(target=run, daemon=True).start()
+            return self._send(202, json.dumps({"job": jid, "state": "running"}))
+        return self._dispatch(p, body)
+
+    def _dispatch(self, p, body):
         if p.path == "/api/video":
             try:
                 if not comfy_up():

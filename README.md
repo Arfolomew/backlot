@@ -102,12 +102,34 @@ it asks ComfyUI to drop its weights about ten seconds later, so the card is free
 you do next. A reload or a second tab cancels it; a render in flight finishes first. The app
 and the proxy keep running quietly (`./stop.sh` ends them) and ComfyUI itself is never stopped.
 
+## Renders are jobs
+
+Every render endpoint can run as a background job: send `X-Backlot-Async: 1`, get a job id
+back at once, and poll `/api/jobs/<id>` (202 while running, then the normal response). The
+page does this for everything, which is why a reload mid-render picks the result back up and
+why a 7-minute H3 clip survives a reverse proxy's request timeout. Without the header the
+same endpoints answer inline, so scripts and curl keep working as before.
+
+## Exposing it beyond localhost
+
+Set `BACKLOT_PASSWORD` and every request needs HTTP Basic auth (any username, that password).
+Backlot binds to 127.0.0.1 only; put a tunnel in front of it, for example
+[cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/):
+
+```bash
+BACKLOT_PASSWORD='something-long' ./start.sh
+cloudflared tunnel --url http://127.0.0.1:8801      # quick tunnel, prints a public URL
+```
+
+Anyone with the URL and the password can spend your GPU, so keep both private.
+
 ## Configuration
 
 Everything is an environment variable; `start.sh` sets the first two for you.
 
 | Variable | Default | Meaning |
 |---|---|---|
+| `BACKLOT_PASSWORD` | unset | If set, HTTP Basic auth on every request (any username). Use when the app is exposed beyond localhost. |
 | `BACKLOT_COMFY_URL` | `http://127.0.0.1:8199` | Comfy API endpoint (the local proxy, or Comfy Cloud). |
 | `BACKLOT_COMFYUI_URL` | `http://127.0.0.1:8188` | The plain ComfyUI behind it. Used only by the Free VRAM button. |
 | `BACKLOT_QWEN_URL` | same as `BACKLOT_COMFY_URL` | Optional second Comfy API endpoint (a second proxy) if Qwen Image 2.1 runs on a different ComfyUI, e.g. a newer install. Backlot frees one backend's VRAM before using the other. |

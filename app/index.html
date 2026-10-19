@@ -426,6 +426,55 @@ let VW = 1344, VH = 768, VMODE = 't2v', VIMG = null, VREFS = [], LAST = null, BU
 let TAB = 'video', IW = 1728, IH = 1152, ILAST = null;
 let FREEMSG = null;   // declared up here: status() runs at load and reads it (TDZ)
 
+// Renders run as server-side jobs: jfetch() posts with X-Backlot-Async, gets a job id back
+// at once and polls until it is done, then hands back a Response-like object so the call
+// sites read exactly as before. The job survives a reload (and a reverse proxy's request
+// timeout); the id is kept in localStorage so a reopened page can pick the result up.
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function jfetch(url, opts){
+  const headers = Object.assign({}, opts.headers || {}, {'X-Backlot-Async': '1'});
+  const r0 = await fetch(url, Object.assign({}, opts, {headers}));
+  if(r0.status !== 202) return r0;                 // immediate error (400/503) comes straight back
+  const {job} = await r0.json();
+  return pollJob(job, url);
+}
+async function pollJob(job, url){
+  localStorage.setItem('backlot.job', JSON.stringify({job, url}));
+  for(;;){
+    await sleep(2000);
+    let r;
+    try{ r = await fetch('/api/jobs/' + job); }catch(e){ continue; }   // network blip: keep waiting
+    if(r.status === 202) continue;
+    localStorage.removeItem('backlot.job');
+    return r;
+  }
+}
+// After a reload, finish showing whatever was rendering. Runs on load so the tab
+// handlers below are attached by then.
+addEventListener('load', async () => {
+  let saved = null;
+  try{ saved = JSON.parse(localStorage.getItem('backlot.job') || 'null'); }catch(e){}
+  if(!saved) return;
+  const isVideo = ['/api/video', '/api/upscale', '/api/slowmo'].includes(saved.url);
+  const tab = document.querySelector('.tab[data-tab="' + (isVideo ? 'video' : 'image') + '"]');
+  if(tab && !tab.classList.contains('active')) tab.click();
+  setBusy(true, 'picking up the render that was running before the reload…');
+  try{
+    const r = await pollJob(saved.job, saved.url);
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || 'render failed');
+    if(d.url && /\.(mp4|webm|gif)$/i.test(d.url)){
+      LAST = d.url.split('/').pop();
+      showVideo(d.url + '?t=' + Date.now(), 'finished while the page was closed · ' + (d.took || '?') + 's');
+    }else if(d.url){
+      ILAST = d.url.split('/').pop();
+      showImage(d.url + '?t=' + Date.now(), 'finished while the page was closed · ' + (d.took || '?') + 's');
+    }
+    loadGallery();
+  }catch(e){ fail(e.message); }
+  setBusy(false);
+});
+
 // Heartbeat: lets the server know a window is open.
 setInterval(() => fetch('/api/heartbeat').catch(()=>{}), 5000);
 fetch('/api/heartbeat').catch(()=>{});
@@ -756,7 +805,7 @@ $('#gen').addEventListener('click', async ()=>{
   if(/[A-Z]{3,}/.test(prompt) && !confirm('The prompt still has TEMPLATE PLACEHOLDERS in caps. Generate anyway?')) return;
   setBusy(true, VMODE === 'orbit' ? 'rendering a 360 orbit (ORB360)… about 12 min' : 'generating on MiniMax H3… first run loads a 10GB model');
   try{
-    const r = await fetch('/api/video', {method:'POST', headers:{'Content-Type':'application/json'},
+    const r = await jfetch('/api/video', {method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({mode:VMODE, prompt, width:VW, height:VH,
         seconds: parseFloat($('#seconds').value), seed: parseInt($('#seed').value || '-1'),
         image: VMODE === 'i2v' ? VIMG : null,
@@ -782,7 +831,7 @@ async function runUpscale(payload, label){
   try{
     payload.interpolate = $('#interp').checked;
     payload.fast = $('#vfast').checked;
-    const r = await fetch('/api/upscale', {method:'POST', headers:{'Content-Type':'application/json'},
+    const r = await jfetch('/api/upscale', {method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(payload)});
     const d = await r.json();
     if(!r.ok) throw new Error(d.error || 'upscale failed');
@@ -804,7 +853,7 @@ async function runSlowmo(payload, label){
   $('#err').textContent = '';
   setBusy(true, label);
   try{
-    const r = await fetch('/api/slowmo', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    const r = await jfetch('/api/slowmo', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
     const d = await r.json();
     if(!r.ok) throw new Error(d.error || 'slow-down failed');
     LAST = d.url.split('/').pop();
@@ -950,7 +999,7 @@ $('#igen').addEventListener('click', async ()=>{
   setBusy(true, qwen ? (IMODE === 'edit' ? 'editing with Qwen 2.1' : 'generating on Qwen 2.1') + (trans ? ' (transparent)' : '') + '… about 30 s'
     : IMODE === 'edit' ? 'editing with Qwen-Image-Edit… about 25 s' : 'generating on Krea 2 Turbo' + label + '… ' + steps + ' steps');
   try{
-    const r = await fetch('/api/image', {method:'POST', headers:{'Content-Type':'application/json'},
+    const r = await jfetch('/api/image', {method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({prompt, width:IW, height:IH, steps,
         seed: parseInt($('#iseed').value || '-1'),
         prompt_weight: $('#pweight').checked,
@@ -1087,7 +1136,7 @@ $('#ivert').addEventListener('click', async ()=>{
   $('#verr').textContent = '';
   setBusy(true, 'cropping to ' + VRATIO + ' and upscaling with SeedVR2…');
   try{
-    const r = await fetch('/api/vertical', {method:'POST', headers:{'Content-Type':'application/json'},
+    const r = await jfetch('/api/vertical', {method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({name: ILAST, ratio: VRATIO, pos: +$('#vpos').value / 100})});
     const d = await r.json();
     if(!r.ok) throw new Error(d.error || 'crop failed');
@@ -1109,7 +1158,7 @@ async function runImageUpscale(body, label){   // NOT runUpscale: that name is t
   $('#uerr').textContent = '';
   setBusy(true, 'upscaling ' + label + ' with SeedVR2 (' + (USIZE === '4k' ? '4K' : '2x') + ')… about 20 s');
   try{
-    const r = await fetch('/api/image-upscale', {method:'POST', headers:{'Content-Type':'application/json'},
+    const r = await jfetch('/api/image-upscale', {method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(Object.assign({size: USIZE}, body))});
     const d = await r.json();
     if(!r.ok) throw new Error(d.error || 'upscale failed');
@@ -1182,7 +1231,7 @@ async function runAngles(){
     const fig = $('#ang' + i);
     fig.querySelector('.pending').innerHTML = '<div class="spinner"></div>' + tag(list[i]) + '<br>' + (i + 1) + ' of ' + list.length;
     try{
-      const r = await fetch('/api/image', {method:'POST', headers:{'Content-Type':'application/json'},
+      const r = await jfetch('/api/image', {method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify(Object.assign({mode:'angles', model:'krea2', prompt:'angles', seed,
           image: ISRC_DATA, source: ISRC_NAME}, list[i]))});
       const d = await r.json();

@@ -44,11 +44,21 @@ class Backend:
             return self._client
 
     def alive(self):
+        """The Comfy API answers, and (when we know it) so does the ComfyUI behind it. The
+        proxy's health route does not probe upstream, so a dead ComfyUI would otherwise look fine."""
         try:
             with urllib.request.urlopen(f"{self.api_url}/api/v2/health", timeout=3) as r:
-                return r.status == 200
+                if r.status != 200:
+                    return False
         except Exception:
             return False
+        if self.direct_url:
+            try:
+                with urllib.request.urlopen(f"{self.direct_url}/system_stats", timeout=3) as r:
+                    return r.status == 200
+            except Exception:
+                return False
+        return True
 
     # ---- inputs ----
     def upload(self, raw, filename):

@@ -107,15 +107,17 @@ Inputs are uploaded with `client.assets.from_bytes()` and dropped into `LoadImag
 `output.to_bytes()`. The app never writes into ComfyUI's input folder and never reads its output
 folder, which is what makes it run unchanged against the cloud.
 
-## Measured timings (RTX 4070 Ti SUPER, 16 GB)
+## Measured timings (RTX 4070 Ti SUPER, 16 GB, through the SDK and proxy)
 
 | Job | Time |
 |---|---|
-| Krea 2 Turbo still, 1152x768, 12 steps | about 55 s cold (model load), 15 s warm |
-| SeedVR2 2x upscale of that still | about 16 s |
-| H3 text to video, 5 s at 1344x768, 8 steps | about 7.5 min |
-| H3 reference video, 2 refs, 5 s | about 12 min |
-| 360 Orbit, 1 photo, 5.2 s | about 8 min |
+| Krea 2 Turbo still, 1152x768, 12 steps | 55 s cold (model load), about 15 s warm |
+| SeedVR2 2x upscale of that still | 16 s |
+| H3 text to video, 3 s at 1024x576, 8 steps | 116 s |
+| H3 image to video, 3 s at 1024x576 | 156 s |
+| H3 reference video, 1 ref, 3 s at 1024x576 | 186 s |
+| 360 Orbit, 1 photo, 5.2 s at 1152x768 | 406 s |
+| H3 text to video, 5 s at 1344x768 | about 7.5 min |
 
 H3 is slow on 16 GB because the 13.6 GB text encoder has to run on the CPU. That is the trade
 the whole project is built around: it works on the card most people actually have.

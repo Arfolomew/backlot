@@ -6,3 +6,7 @@ output/
 .proxy-state/
 app/*.bak*
 app/prompts/*.bak*
+.proxy-state-qwen/
+demo/*
+!demo/backlot-demo.mp4
+!demo/backlot-demo-poster.jpg

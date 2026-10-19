@@ -7,6 +7,12 @@ A local, open-weights video and image studio on your own ComfyUI, driven through
 
 Built for the Comfy [Open Source Higgsfield](https://www.comfy.org/open-source-higgsfield) challenge.
 
+## Demo (95 seconds)
+
+[![Backlot demo video](demo/backlot-demo-poster.jpg)](https://github.com/Arfolomew/backlot/raw/main/demo/backlot-demo.mp4)
+
+https://github.com/Arfolomew/backlot/raw/main/demo/backlot-demo.mp4
+
 ## What it does
 
 **Video (MiniMax H3, 24 fps, with sound)**

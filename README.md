@@ -11,7 +11,7 @@ Built for the Comfy [Open Source Higgsfield](https://www.comfy.org/open-source-h
 
 [![Backlot demo video](demo/backlot-demo-poster.jpg)](https://demos.onpointfl.com/backlot/)
 
-Click the poster to watch, or [download the MP4](demo/backlot-demo.mp4).
+Click the poster to watch, or [open the MP4 directly](https://demos.onpointfl.com/backlot/backlot-demo.mp4).
 
 ## What it does
 

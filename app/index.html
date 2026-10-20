@@ -1248,6 +1248,7 @@ $('#tabs').addEventListener('click', e=>{
   $('#apps-panel').style.display = TAB === 'apps' ? 'flex' : 'none';
   if(TAB === 'apps' && !$('#appgrid').children.length) paintApps();
   if(TAB === 'cinema' && !CINEMA) loadCinema();
+  if(TAB === 'cinema') $('#viewer').innerHTML = '<video src="/previews/cinema/calm-lighthouse-1960s.mp4" controls autoplay loop muted></video><div class="meta">sample &middot; Calm pacing, Drama, 1960s, practicals, 35mm anamorphic f/1.4 &middot; one 8 s render, cuts at 2.3 s and 5.3 s</div>';
   if(TAB === 'moves' && !MOVES.length) loadMoves();
   $('#viewer').innerHTML = '<div class="placeholder">Nothing generated yet.</div>';
   loadGallery();

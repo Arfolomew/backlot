@@ -7,7 +7,7 @@ A local, open-weights video and image studio on your own ComfyUI, driven through
 
 Built for the Comfy [Open Source Higgsfield](https://www.comfy.org/open-source-higgsfield) challenge.
 
-## Demo (95 seconds)
+## Demo (2 minutes)
 
 [![Backlot demo video](demo/backlot-demo-poster.jpg)](https://demos.onpointfl.com/backlot/)
 

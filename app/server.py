@@ -81,8 +81,36 @@ ORB360_SIZES = {"land": (1152, 768), "port": (832, 1024), "square": (800, 800)}
 OUTPUT_ROOT = os.path.expanduser(os.environ.get("BACKLOT_OUTPUT_DIR", os.path.join(HERE, "..", "output")))
 VIDEO_DIR = os.path.join(OUTPUT_ROOT, "videos")
 IMAGE_DIR = os.path.join(OUTPUT_ROOT, "images")
+AUDIO_DIR = os.path.join(OUTPUT_ROOT, "audio")
 META_DIR = os.path.join(OUTPUT_ROOT, "meta")      # one small JSON per output: what made it (Oct 20 2026)
 os.makedirs(META_DIR, exist_ok=True)
+os.makedirs(AUDIO_DIR, exist_ok=True)
+
+# Audio tab (Oct 20 2026). Two engines, both core ComfyUI nodes:
+#   song = YuE2 3B (lyrics + style -> a full song with vocals, 48 kHz). ComfyUI's own "Text to Music
+#          (YuE2)" blueprint: checkpoint -> [LoRA chain] -> (ABC plan) -> music tokens -> KSampler
+#          32 steps dpm_2/sgm_uniform -> VAE decode. plan "off" sings the lyrics straight (clearest
+#          delivery, best for rap); "full" writes a section plan and melody first; "melody" = plan only.
+#   sfx  = Stable Audio 3 Medium (any sound or music bed up to ~45 s). T5Gemma encoder, 8 steps lcm,
+#          CFG 1, prompt ends "Length: N seconds" (the model listens to that).
+# Both decode through SaveAudioFloatWAV (one 40-line custom node in setup/) because the stock 16-bit
+# SaveAudio clips YuE2's overs; the WAV is then loudness-normalized to MP3 here.
+YUE2_CKPT = "yue2_3b_bf16.safetensors"
+SA3_CKPT = "stable_audio_3_medium.safetensors"
+SA3_TE = "t5gemma_b_b_ul2.safetensors"
+SONG_MAX_SECONDS = 240
+SFX_MAX_SECONDS = 45
+# YuE2 LoRAs: slot says which half the weights train (clip = planner, model = decoder, both).
+YUE2_LORAS = {
+    "realaudio-nar-v4.safetensors": {"label": "Real production sound", "slot": "model", "default": 1.0},
+    "instrumental-ar-v3.safetensors": {"label": "Instrumental (no vocals)", "slot": "clip", "default": 1.0},
+}
+for _s, _l in [("male", "Male vocal"), ("female", "Female vocal"), ("hiphop", "Hip-hop"), ("rnb", "R&B"),
+               ("pop", "Pop"), ("pop-punk", "Pop punk"), ("indie-rock", "Indie rock"), ("metal", "Metal"),
+               ("country", "Country"), ("acoustic-folk", "Acoustic folk"), ("house", "House"),
+               ("disco-funk", "Disco funk"), ("lofi", "Lo-fi"), ("kpop", "K-pop"), ("reggaeton", "Reggaeton"),
+               ("afrobeats", "Afrobeats")]:
+    YUE2_LORAS[f"slider-{_s}.safetensors"] = {"label": _l, "slot": "clip", "default": 0.6}
 TMP_DIR = os.path.join(OUTPUT_ROOT, ".tmp")
 for _d in (VIDEO_DIR, IMAGE_DIR, TMP_DIR):
     os.makedirs(_d, exist_ok=True)
@@ -259,7 +287,7 @@ def _idle_watchdog():
 # 7-minute H3 render survive a reverse proxy's request timeout or a page reload.
 JOBS = {}                      # id -> {"state", "path", "t0", "code", "body", "ctype", "t1"}
 JOBS_LOCK = __import__("threading").Lock()
-JOB_PATHS = {"/api/video", "/api/image", "/api/vertical", "/api/image-upscale",
+JOB_PATHS = {"/api/video", "/api/image", "/api/audio", "/api/vertical", "/api/image-upscale",
              "/api/upscale", "/api/slowmo"}
 JOB_KEEP_SEC = 3600            # finished jobs stay fetchable this long
 
@@ -385,6 +413,70 @@ def moss_layout_prompt(summary, fields, width, height):
     return json.dumps(layout, ensure_ascii=False, separators=(",", ":"))
 
 
+def build_yue2(style, lyrics, seconds, seed, plan="off", loras=(), prefix="audio/Backlot_song"):
+    wf = {"ckpt": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": YUE2_CKPT}}}
+    model, clip = ["ckpt", 0], ["ckpt", 1]
+    for i, (name, strength) in enumerate(loras):
+        meta = YUE2_LORAS[name]
+        nid = f"lora{i}"
+        wf[nid] = {"class_type": "LoraLoader", "inputs": {
+            "model": model, "clip": clip, "lora_name": name,
+            "strength_model": strength if meta["slot"] in ("model", "both") else 0.0,
+            "strength_clip": strength if meta["slot"] in ("clip", "both") else 0.0}}
+        model, clip = [nid, 0], [nid, 1]
+    abc = ""
+    if plan in ("full", "melody"):
+        wf["abc"] = {"class_type": "YuE2GenerateABC", "inputs": {
+            "clip": clip, "style": style, "lyrics": lyrics, "seed": seed, "mode": plan,
+            "max_abc_tokens": 8192, "temperature": 0.7, "top_p": 0.9, "top_k": 30,
+            "repetition_penalty": 1.005, "penalty_window": 100}}
+        abc = ["abc", 0]
+    wf["music"] = {"class_type": "YuE2GenerateMusic", "inputs": {
+        "clip": clip, "style": style, "lyrics": lyrics, "abc": abc, "seed": seed,
+        "mode": "full" if plan == "off" else plan, "max_duration": float(seconds),
+        "temperature": 1.0, "top_p": 0.95, "top_k": 100, "repetition_penalty": 1.2}}
+    wf["neg"] = {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["music", 0]}}
+    wf["latent"] = {"class_type": "EmptyYuE2LatentAudio", "inputs": {"seconds": ["music", 1], "batch_size": 1}}
+    wf["sample"] = {"class_type": "KSampler", "inputs": {
+        "model": model, "positive": ["music", 0], "negative": ["neg", 0], "latent_image": ["latent", 0],
+        "seed": seed, "steps": 32, "cfg": 1.0, "sampler_name": "dpm_2", "scheduler": "sgm_uniform", "denoise": 1.0}}
+    wf["decode"] = {"class_type": "VAEDecodeAudio", "inputs": {"samples": ["sample", 0], "vae": ["ckpt", 2]}}
+    wf["save"] = {"class_type": "SaveAudioFloatWAV", "inputs": {"audio": ["decode", 0], "filename_prefix": prefix}}
+    return wf
+
+
+def build_sa3(prompt, seconds, seed, steps=8, prefix="audio/Backlot_sfx"):
+    return {
+        "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": SA3_CKPT}},
+        "9": {"class_type": "CLIPLoader", "inputs": {"clip_name": SA3_TE, "type": "stable_audio", "device": "default"}},
+        "2": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["9", 0], "text": f"{prompt} Length: {seconds} seconds"}},
+        "3": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["9", 0], "text": ""}},
+        "4": {"class_type": "ConditioningStableAudio", "inputs": {
+            "positive": ["2", 0], "negative": ["3", 0], "seconds_start": 0.0, "seconds_total": float(seconds)}},
+        "5": {"class_type": "EmptyLatentAudio", "inputs": {"seconds": float(seconds), "batch_size": 1}},
+        "6": {"class_type": "KSampler", "inputs": {
+            "model": ["1", 0], "positive": ["4", 0], "negative": ["4", 1], "latent_image": ["5", 0],
+            "seed": seed, "steps": steps, "cfg": 1.0, "sampler_name": "lcm", "scheduler": "simple", "denoise": 1.0}},
+        "7": {"class_type": "VAEDecodeAudio", "inputs": {"samples": ["6", 0], "vae": ["1", 2]}},
+        "8": {"class_type": "SaveAudioFloatWAV", "inputs": {"audio": ["7", 0], "filename_prefix": prefix}},
+    }
+
+
+def wav_to_mp3(wav_bytes, out_path):
+    """Loudness-normalize (-14 LUFS, -1.5 dBTP, the streaming target) and write 320k MP3."""
+    tmp = out_path + ".wav"
+    with open(tmp, "wb") as f:
+        f.write(wav_bytes)
+    try:
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", tmp, "-af", "loudnorm=I=-14:TP=-1.5:LRA=11",
+                        "-codec:a", "libmp3lame", "-b:a", "320k", out_path], check=True, timeout=300)
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+
+
 def submit_and_wait(wf, timeout=1800, exts=(".mp4", ".webm", ".gif"), base=None, staging=None, backend=None):
     """Submit a graph through the Comfy SDK and wait for it.
     Returns (bytes, ext, None); the third slot is kept for call-site compatibility."""
@@ -484,14 +576,15 @@ class H(BaseHTTPRequestHandler):
         try:
             d = json.loads(body)
             url = d.get("url") or ""
-            if not (url.startswith("/outputs/") or url.startswith("/images/")):
+            if not (url.startswith("/outputs/") or url.startswith("/images/") or url.startswith("/audio/")):
                 return
             req = self._body or {}
             mode = req.get("mode") or ""
             label = str(req.get("label") or "").strip()
             if not label:
                 label = {"t2v": "Video", "i2v": "Image to Video", "ref": "Reference", "orbit": "360 Orbit",
-                         "swap": "Character Swap", "edit": "Edit", "angles": "Angles"}.get(mode, mode or "render")
+                         "swap": "Character Swap", "edit": "Edit", "angles": "Angles",
+                         "song": "Song", "sfx": "Sound FX"}.get(mode, mode or "render")
             meta = {"label": label[:80], "mode": mode, "move": req.get("move"), "seed": d.get("seed"),
                     "prompt": str(req.get("prompt") or req.get("subject") or req.get("scene") or "")[:400],
                     "took": d.get("took"), "made": time.strftime("%Y-%m-%d %H:%M")}
@@ -602,6 +695,8 @@ class H(BaseHTTPRequestHandler):
             kind = (urllib.parse.parse_qs(p.query).get("kind") or ["video"])[0]
             if kind == "image":
                 folder, want = IMAGE_DIR, (".png", ".jpg", ".jpeg", ".webp")
+            elif kind == "audio":
+                folder, want = AUDIO_DIR, (".mp3", ".wav")
             else:
                 folder, want = VIDEO_DIR, (".mp4", ".webm", ".gif")
             try:
@@ -627,6 +722,15 @@ class H(BaseHTTPRequestHandler):
                 with open(fp, "rb") as f:
                     return self._send(200, f.read(), mime)
             return self._send(404, json.dumps({"error": "not found"}))
+        if p.path.startswith("/audio/"):
+            name = os.path.basename(urllib.parse.unquote(p.path[len("/audio/"):]))
+            fp = os.path.join(AUDIO_DIR, name)
+            if os.path.isfile(fp):
+                with open(fp, "rb") as f:
+                    return self._send(200, f.read(), "audio/mpeg" if name.endswith(".mp3") else "audio/wav")
+            return self._send(404, json.dumps({"error": "not found"}))
+        if p.path == "/api/audio/loras":
+            return self._send(200, json.dumps([{"file": k, **v} for k, v in YUE2_LORAS.items()]))
         if p.path.startswith("/outputs/"):
             name = os.path.basename(urllib.parse.unquote(p.path[len("/outputs/"):]))
             fp = os.path.join(VIDEO_DIR, name)
@@ -976,6 +1080,53 @@ class H(BaseHTTPRequestHandler):
             freed = comfy_free()
             return self._send(200, json.dumps({
                 "ok": True, "freed_mib": freed, "used_mib": gpu_used_mib()}))
+
+        if p.path == "/api/audio":
+            try:
+                engine = body.get("engine", "song")
+                seed = int(body.get("seed", -1))
+                if seed < 0:
+                    seed = int.from_bytes(os.urandom(4), "big")
+                if engine == "sfx":
+                    prompt = (body.get("prompt") or "").strip()
+                    if not prompt:
+                        return self._send(400, json.dumps({"error": "describe the sound first"}))
+                    seconds = max(1, min(SFX_MAX_SECONDS, int(float(body.get("seconds", 6)))))
+                    wf = build_sa3(prompt, seconds, seed)
+                    label = prompt
+                elif engine == "song":
+                    style = (body.get("style") or "").strip()
+                    lyrics = (body.get("lyrics") or "").strip()
+                    if not style:
+                        return self._send(400, json.dumps({"error": "give the song a style (genre, mood, voice, tempo)"}))
+                    if not lyrics:
+                        return self._send(400, json.dumps({"error": "write some lyrics, or section tags like [verse] [chorus] for an instrumental"}))
+                    plan = body.get("plan", "off")
+                    if plan not in ("off", "full", "melody"):
+                        return self._send(400, json.dumps({"error": "plan must be off, full or melody"}))
+                    seconds = max(10, min(SONG_MAX_SECONDS, int(float(body.get("seconds", 60)))))
+                    loras = []
+                    for item in (body.get("loras") or [])[:6]:
+                        name = str(item.get("file", "")) if isinstance(item, dict) else str(item)
+                        if name in YUE2_LORAS:
+                            strength = float(item.get("strength", YUE2_LORAS[name]["default"])) if isinstance(item, dict) else YUE2_LORAS[name]["default"]
+                            loras.append((name, max(0.0, min(1.5, strength))))
+                    wf = build_yue2(style, lyrics, seconds, seed, plan=plan, loras=loras)
+                    label = style
+                else:
+                    return self._send(400, json.dumps({"error": "engine must be song or sfx"}))
+                if not comfy_up():
+                    return self._send(503, json.dumps({"error": BACKEND_DOWN}))
+                t0 = time.time()
+                blob, ext, _ = submit_and_wait(wf, timeout=1800, exts=(".wav", ".flac"))
+                name = f"{engine}_{time.strftime('%Y-%m-%d_%H%M%S')}.mp3"
+                path = os.path.join(AUDIO_DIR, name)
+                wav_to_mp3(blob, path)
+                return self._send(200, json.dumps({
+                    "url": f"/audio/{name}", "file": path, "seed": seed, "seconds": seconds, "engine": engine,
+                    "label": label[:80], "took": round(time.time() - t0, 1)}))
+            except Exception as e:
+                return self._send(500, json.dumps({"error": str(e)}))
 
         if p.path == "/api/image" and body.get("model") == "moss":
             # MOSS-Image (see MOSS_* above). text = plain prompt; layout = the poster form.

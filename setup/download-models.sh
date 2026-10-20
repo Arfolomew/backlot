@@ -50,6 +50,9 @@ if [ "$ALL" = "--all" ]; then
   get Comfy-Org/MOSS-Image                    diffusion_models/moss_image_sft_int8_convrot.safetensors diffusion_models
   get Comfy-Org/MOSS-Image                    text_encoders/qwen3.5_9b_w4a8_gptq.safetensors     text_encoders
   get Comfy-Org/MOSS-Image                    vae/flux2-vae_small.safetensors                    vae
+  get Comfy-Org/YuE2                          checkpoints/yue2_3b_bf16.safetensors               checkpoints
+  get Comfy-Org/stable-audio-3                checkpoints/stable_audio_3_medium.safetensors      checkpoints
+  get Comfy-Org/stable-audio-3                text_encoders/t5gemma_b_b_ul2.safetensors          text_encoders
   get numz/SeedVR2_comfyUI                    seedvr2_ema_3b_fp8_e4m3fn.safetensors             SEEDVR2
   get numz/SeedVR2_comfyUI                    ema_vae_fp16.safetensors                          SEEDVR2
   get ai-forever/Real-ESRGAN                  RealESRGAN_x2.pth                                 upscale_models

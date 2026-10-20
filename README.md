@@ -32,6 +32,11 @@ Click the poster to watch, or [open the MP4 directly](https://demos.onpointfl.co
   the words you quote; Layout mode is a poster form (headline, lines, illustration, footer, URL) and
   each block lands where you put it.
 
+**Audio (YuE2, Stable Audio 3 Medium)**
+- Song: lyrics and a style line become a full song with vocals (YuE2 3B, 48 kHz), with optional
+  LoRA flavors (voice, genre, instrumental). Sound FX: any effect, ambience or music bed up to 45 s
+  from one sentence. Everything is loudness-normalized to MP3.
+
 Every render is sent as a job through the Comfy SDK. Locally the SDK talks to
 [`comfy-api-proxy`](https://pypi.org/project/comfy-api-proxy/), which serves the Comfy API in front
 of a plain ComfyUI. Point `BACKLOT_COMFY_URL` at Comfy Cloud and nothing else changes.
@@ -69,7 +74,7 @@ no clip cap, no queue, and nothing leaving the machine.
 ## Requirements
 
 - Linux (tested on Ubuntu 24.04) or macOS, Python 3.10+.
-- A ComfyUI install (0.35 or newer; **0.38 or newer for Qwen Image 2.1**, **0.42 or newer for MOSS-Image**; everything here was last run on 0.42.1) with these node packs in `custom_nodes/`:
+- A ComfyUI install (0.35 or newer; **0.38 or newer for Qwen Image 2.1**, **0.42 or newer for MOSS-Image**; YuE2 and Stable Audio 3 nodes are core since 0.38; everything here was last run on 0.42.1) with these node packs in `custom_nodes/`:
   - [city96/ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF)
   - [kijai/ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes)
   - [jlucasmcrell/ComfyUI-H3-Multishot](https://github.com/jlucasmcrell/ComfyUI-H3-Multishot)
@@ -200,6 +205,8 @@ folder, which is what makes it run unchanged against the cloud.
 | Qwen Image 2.1 instruction edit, about 1 MP | 26 s |
 | MOSS-Image still, 992x1504, 25 steps | 25 s cold, about 16 s warm |
 | MOSS-Image layout poster, 6 blocks, 992x1504 | 22 s |
+| YuE2 song, 30 s, plan off, 32 steps | 14 s |
+| Stable Audio 3 sound effect, 6 s, 8 steps | 6 s |
 | H3 text to video, 5 s at 1344x768 | about 7.5 min |
 
 H3 is slow on 16 GB because the 13.6 GB text encoder has to run on the CPU. That is the trade

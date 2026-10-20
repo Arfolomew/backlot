@@ -25,3 +25,6 @@ clone https://github.com/Fannovel16/ComfyUI-Frame-Interpolation      comfyui-fra
 clone https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler          ComfyUI-SeedVR2_VideoUpscaler
 clone https://github.com/lbouaraba/comfyui-krea2edit                 comfyui-krea2edit
 echo "done. Restart ComfyUI."
+
+# Audio tab: one small node that saves 32-bit float WAV (the stock SaveAudio clips YuE2's overs).
+cp "$(dirname "$0")/save_audio_float_wav.py" "$NODES/save_audio_float_wav.py" && echo "copied save_audio_float_wav.py"

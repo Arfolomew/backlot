@@ -82,6 +82,12 @@ for _d in (VIDEO_DIR, IMAGE_DIR, TMP_DIR):
 with open(os.path.join(HERE, "moves.json")) as _f:
     MOVES = {m["id"]: m for m in json.load(_f)["moves"]}
 PREVIEW_DIR = os.path.join(HERE, "previews")
+# Character Swap (akatz-ai H3 Character Swap LoRA V1.5, Oct 17 2026 A/B winner over Viggle):
+# Ref2VA graph + swap LoRA 1.0 + the ref2v turbo, 8 steps, er_sde / normal. Source clip = <Video 1>
+# (its soundtrack rides along), character = <Picture 1>. ~22 min per 5 s clip on a 16 GB card, most
+# of it the 32B text encoder reading the source video.
+SWAP_LORA = "h3_character_swap_v1.5.safetensors"
+SWAP_MAX_SECONDS = 10.0
 
 # Cinema Studio (Oct 20 2026): pickers -> one H3 prompt in the model's own three-field,
 # multi-shot format. Catalog of fragments in cinema.json.
@@ -583,7 +589,7 @@ class H(BaseHTTPRequestHandler):
                     body["camera_motion"] = bool(move.get("lora"))
                     body["camera_strength"] = float(move.get("strength") or 1.0)
                     body.setdefault("seconds", move.get("seconds", 5))
-                if not prompt and mode != "orbit":   # orbit writes its own prompt
+                if not prompt and mode not in ("orbit", "swap"):   # orbit and swap write their own prompt
                     return self._send(400, json.dumps({"error": "prompt required"}))
                 width = int(body.get("width", 1344))
                 height = int(body.get("height", 768))
@@ -636,6 +642,62 @@ class H(BaseHTTPRequestHandler):
                         "frames": frames, "seconds": round(frames / H3_FPS, 2),
                         "took": round(time.time() - t0, 1), "mode": mode, "refs": len(names),
                         "width": width, "height": height}))
+
+                # ---- Character Swap (Apps tab, Oct 20 2026) ----
+                if mode == "swap":
+                    vid = body.get("video") or ""
+                    img = body.get("image") or ""
+                    if not vid or not img:
+                        return self._send(400, json.dumps(
+                            {"error": "Character Swap needs a source video and a character image"}))
+                    vraw = base64.b64decode(str(vid).split(",")[-1])
+                    iraw = base64.b64decode(str(img).split(",")[-1])
+                    stamp = int(time.time())
+                    vname = upload_to_comfy(vraw, f"backlot_swap_src_{stamp}.mp4")
+                    iname = upload_to_comfy(iraw, f"backlot_swap_char_{stamp}.png")
+                    # length follows the source clip (capped); probe it from a local copy
+                    tmp = stage_local(vraw, f"swap_probe_{stamp}.mp4")
+                    try:
+                        out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                              "-of", "csv=p=0", tmp], capture_output=True, text=True).stdout.strip()
+                        src_seconds = float(out) if out else seconds
+                    except Exception:
+                        src_seconds = seconds
+                    finally:
+                        cleanup_local(tmp)
+                    seconds = max(2.0, min(SWAP_MAX_SECONDS, src_seconds))
+                    who = (body.get("subject") or "the person").strip()
+                    prompt = (f"subject_definitions:\n<Subject 1> is the character in <Picture 1>: keep this face, "
+                              f"hair, skin and clothing exactly.\n<Subject 2> is the performance in <Video 1>: every movement, "
+                              f"gesture, camera move, timing and the spoken audio.\n\nsummary:\nReplace {who} in <Video 1> with "
+                              f"<Subject 1>, keeping <Subject 2> unchanged.\n\nretention_analysis:\n<Subject 2> is fully preserved: "
+                              f"framing, camera motion, body movement, lip movement and the soundtrack carry over unaltered. "
+                              f"<Subject 1> replaces the face, hair and clothing of {who} and nothing else changes.\n\n"
+                              f"detailed_description:\n[Shot 1] The same shot as <Video 1> from first frame to last, with "
+                              f"<Subject 1> in place of {who}, matching every pose and expression in sync with the original.\n\n"
+                              f"overall_soundscape:\nIdentical to <Video 1>.\n\nnon_diegetic_music:\nN/A")
+                    wf, frames = build_ref2va(
+                        prompt, ref_images=[iname], width=width, height=height,
+                        seconds=seconds, steps=H3_STEPS, seed=seed, scheduler="normal",
+                        low_vram_chunks=H3_HEAD_CHUNKS, fps=H3_FPS, clip_cpu=True,
+                        prefix="video/BacklotSwap", extra_loras=((SWAP_LORA, 1.0),))
+                    wf["9"]["inputs"]["sampler_name"] = "er_sde"
+                    wf["60"] = {"class_type": "LoadVideo", "inputs": {"file": vname}}
+                    wf["61"] = {"class_type": "GetVideoComponents", "inputs": {"video": ["60", 0]}}
+                    wf["8"]["inputs"]["ref_videos.ref_video_0"] = ["61", 0]
+                    wf["8"]["inputs"]["ref_video_audios.ref_video_audio_0"] = ["61", 1]
+                    t0 = time.time()
+                    blob, ext, staged = submit_and_wait(wf, timeout=3600)
+                    name, path = save_output(blob, kind="swap", ext=ext, staged=staged)
+                    for nm in (vname, iname):
+                        try:
+                            discard_upload(nm)
+                        except OSError:
+                            pass
+                    return self._send(200, json.dumps({
+                        "url": f"/outputs/{name}", "file": path, "seed": seed, "frames": frames,
+                        "seconds": round(frames / H3_FPS, 2), "took": round(time.time() - t0, 1),
+                        "mode": mode, "width": width, "height": height}))
 
                 # ---- Ref2VA: its own DiT, own turbo LoRA, own builder ----
                 if mode == "ref":

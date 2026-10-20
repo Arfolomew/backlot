@@ -82,6 +82,16 @@
   #vidfile{ display:none; }
   #viewer img{ background:repeating-conic-gradient(#3a3a3a 0% 25%, #2a2a2a 0% 50%) 50% / 24px 24px; }
   .chk{ display:flex; align-items:center; gap:8px; margin-top:10px; font-size:12px; color:var(--muted); }
+  /* Apps (Oct 20 2026) */
+  .appgrid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+  .appcard{ border:1px solid var(--line); border-radius:10px; padding:10px 11px; cursor:pointer; background:var(--panel2); }
+  .appcard:hover{ border-color:var(--accent); }
+  .appcard.active{ border-color:var(--accent); box-shadow:0 0 0 2px rgba(255,157,92,.25); }
+  .appcard .aname{ font-size:12px; font-weight:700; }
+  .appcard .ablurb{ font-size:10.5px; color:var(--muted); margin-top:3px; line-height:1.35; }
+  .appcard .atime{ font-size:10px; color:var(--accent); margin-top:5px; }
+  .appform{ margin-top:12px; }
+  .appform .ratios{ grid-template-columns:repeat(4,1fr); }
   /* Cinema Studio (Oct 20 2026) */
   .pickrow{ display:flex; flex-wrap:wrap; gap:5px; margin-top:4px; }
   .pickrow .ratio{ padding:6px 10px; font-size:11px; }
@@ -131,6 +141,7 @@
       <div class="tab" data-tab="image">IMAGE</div>
       <div class="tab" data-tab="moves">MOVES</div>
       <div class="tab" data-tab="cinema">CINEMA</div>
+      <div class="tab" data-tab="apps">APPS</div>
     </div>
     <div class="status"><span class="dot" id="dot"></span><span id="statustxt">checking backend…</span></div>
   </header>
@@ -252,6 +263,15 @@
           (fast mode: about 1 min, doubles the size but looks smoother/plastic).</div>
       </div>
      </div><!-- /video-panel -->
+
+     <div id="apps-panel" style="display:none; flex-direction:column; flex:1; min-height:0">
+      <label class="first">Apps</label>
+      <div class="hint">One input, one job, one result. Each app is a saved recipe on the models already installed.</div>
+      <div class="appgrid" id="appgrid"></div>
+      <div class="appform" id="appform" style="display:none"></div>
+      <button class="gen" id="agen" style="display:none">Run</button>
+      <div class="err" id="aerr"></div>
+     </div><!-- /apps-panel -->
 
      <div id="cinema-panel" style="display:none; flex-direction:column; flex:1; min-height:0">
       <label class="first">Cinema Studio</label>
@@ -884,7 +904,7 @@ function cropNote(){
 
 function setBusy(on, msg){
   BUSY = on;
-  $('#gen').disabled = on; $('#mgen').disabled = on; $('#cgen').disabled = on; $('#upscale').disabled = on; $('#igen').disabled = on; $('#ivert').disabled = on || !ILAST; $('#iup').disabled = on || !ILAST; $('#iupload').disabled = on;
+  $('#gen').disabled = on; $('#mgen').disabled = on; $('#cgen').disabled = on; $('#agen').disabled = on; $('#upscale').disabled = on; $('#igen').disabled = on; $('#ivert').disabled = on || !ILAST; $('#iup').disabled = on || !ILAST; $('#iupload').disabled = on;
   if(on){
     $('#viewer').innerHTML = '<div class="placeholder"><div class="spinner"></div>' + (msg||'working…') + '</div>';
   }
@@ -1008,6 +1028,76 @@ function loadGallery(){
   }).catch(()=>{});
 }
 loadGallery();
+
+// ---------------- Apps (Oct 20 2026) ----------------
+// Each app = a saved recipe over an endpoint that already exists. Inputs are declared, the form is built from them.
+const APPS = [
+  {id:'angles', name:'Angles', time:'~25 s', blurb:'Re-shoot a photo from a new camera position: 8 directions, 4 heights, 3 distances (Qwen Multiple Angles LoRA).',
+   inputs:[{k:'image',t:'image',label:'Photo'},{k:'azimuth',t:'pick',label:'Direction',opts:['front view','front-right quarter view','right side view','back-right quarter view','back view','back-left quarter view','left side view','front-left quarter view'],def:'front-right quarter view'},
+           {k:'elevation',t:'pick',label:'Height',opts:['low-angle shot','eye-level shot','elevated shot','high-angle shot'],def:'eye-level shot'},{k:'distance',t:'pick',label:'Distance',opts:['close-up','medium shot','wide shot'],def:'medium shot'}],
+   run:v=>({url:'/api/image', body:{mode:'angles', image:v.image, azimuth:v.azimuth, elevation:v.elevation, distance:v.distance, width:1728, height:1152}, kind:'image'})},
+  {id:'relight', name:'Relight', time:'~25 s', blurb:'Change the light on any photo: golden hour, window, neon, overcast, studio (Qwen Image Edit).',
+   inputs:[{k:'image',t:'image',label:'Photo'},{k:'light',t:'pick',label:'Light',opts:['golden hour','soft window light','neon night','overcast daylight','studio softbox','candlelight'],def:'golden hour'}],
+   run:v=>({url:'/api/image', body:{mode:'edit', image:v.image, prompt:'Relight this photo with ' + v.light + ', keep the subject, framing and every detail exactly the same, only the lighting changes.', width:1728, height:1152}, kind:'image'})},
+  {id:'cutout', name:'Cutout', time:'~25 s', blurb:'Lift the subject onto a transparent background as a real RGBA PNG (Qwen Image 2.1).',
+   inputs:[{k:'image',t:'image',label:'Photo'}],
+   run:v=>({url:'/api/image', body:{model:'qwen21', mode:'edit', image:v.image, transparent:true, prompt:'Keep the main subject exactly as it is and remove the entire background, transparent background.', width:1728, height:1152}, kind:'image'})},
+  {id:'upscale4k', name:'4K Upscale', time:'~20 s', blurb:'SeedVR2 to a 2160 short edge. Real pores and lettering, not plastic smoothing.',
+   inputs:[{k:'image',t:'image',label:'Photo'}],
+   run:v=>({url:'/api/image-upscale', body:{image:v.image, size:'4k'}, kind:'image'})},
+  {id:'orbit', name:'360 Orbit', time:'~12 min', blurb:'One photo becomes a full turntable clip that loops (ORB360 LoRA). Three photos (front, 120°, 240°) give a clean back side.',
+   inputs:[{k:'images',t:'images',label:'1 or 3 photos'}],
+   run:v=>({url:'/api/video', body:{mode:'orbit', images:v.images, width:1152, height:768, prompt:''}, kind:'video'})},
+  {id:'charswap', name:'Character Swap', time:'~20 min / 5 s', blurb:'Put a new face, hair and outfit on the person in a clip. Motion, lip sync and sound stay (akatz Character Swap V1.5).',
+   inputs:[{k:'video',t:'video',label:'Source clip (up to 10 s)'},{k:'image',t:'image',label:'Character photo'},{k:'subject',t:'text',label:'Who to replace',def:'the person'}],
+   run:v=>({url:'/api/video', body:{mode:'swap', video:v.video, image:v.image, subject:v.subject, width:1344, height:768}, kind:'video'})},
+];
+let APP = null, AVALS = {};
+function paintApps(){
+  $('#appgrid').innerHTML = APPS.map(a => '<div class="appcard' + (APP && APP.id === a.id ? ' active' : '') + '" data-id="' + a.id + '"><div class="aname">' + a.name + '</div><div class="ablurb">' + a.blurb + '</div><div class="atime">' + a.time + '</div></div>').join('');
+}
+function readFileAsData(file){ return new Promise((res, rej)=>{ const rd = new FileReader(); rd.onload = ()=>res(rd.result); rd.onerror = rej; rd.readAsDataURL(file); }); }
+$('#appgrid').addEventListener('click', e=>{
+  const c = e.target.closest('.appcard'); if(!c) return;
+  APP = APPS.find(a => a.id === c.dataset.id); AVALS = {};
+  document.querySelectorAll('#appgrid .appcard').forEach(x=>x.classList.toggle('active', x.dataset.id === APP.id));
+  const f = $('#appform'); f.style.display = ''; $('#agen').style.display = ''; $('#agen').textContent = 'Run ' + APP.name; $('#aerr').textContent = '';
+  f.innerHTML = APP.inputs.map(i => {
+    if(i.t === 'image' || i.t === 'video') return '<label>' + i.label + '</label><input type="file" data-k="' + i.k + '" accept="' + (i.t === 'image' ? 'image/*' : 'video/mp4,video/*') + '">';
+    if(i.t === 'images') return '<label>' + i.label + '</label><input type="file" data-k="' + i.k + '" accept="image/*" multiple>';
+    if(i.t === 'text'){ AVALS[i.k] = i.def || ''; return '<label>' + i.label + '</label><input type="text" data-k="' + i.k + '" value="' + (i.def || '') + '">'; }
+    if(i.t === 'pick'){ AVALS[i.k] = i.def; return '<label>' + i.label + '</label><div class="ratios" data-k="' + i.k + '">' + i.opts.map(o => '<div class="ratio' + (o === i.def ? ' active' : '') + '" data-v="' + o + '">' + o.replace(' view','').replace(' shot','') + '</div>').join('') + '</div>'; }
+    return '';
+  }).join('');
+  $('#viewer').innerHTML = '<div class="placeholder">' + APP.name + ': add the input and press Run.</div>';
+});
+$('#appform').addEventListener('click', e=>{
+  const b = e.target.closest('.ratio'); if(!b) return;
+  const row = b.parentElement; AVALS[row.dataset.k] = b.dataset.v;
+  row.querySelectorAll('.ratio').forEach(x=>x.classList.toggle('active', x === b));
+});
+$('#appform').addEventListener('input', e=>{ if(e.target.type === 'text') AVALS[e.target.dataset.k] = e.target.value; });
+$('#appform').addEventListener('change', async e=>{
+  const inp = e.target; if(inp.type !== 'file') return;
+  if(inp.multiple){ AVALS[inp.dataset.k] = []; for(const f of inp.files) AVALS[inp.dataset.k].push(await readFileAsData(f)); }
+  else AVALS[inp.dataset.k] = inp.files[0] ? await readFileAsData(inp.files[0]) : null;
+});
+$('#agen').addEventListener('click', async ()=>{
+  if(!APP) return; $('#aerr').textContent = '';
+  for(const i of APP.inputs){ const v = AVALS[i.k]; if(v == null || (Array.isArray(v) && !v.length) || v === ''){ $('#aerr').textContent = 'Add: ' + i.label; return; } }
+  const req = APP.run(AVALS);
+  setBusy(true, 'running ' + APP.name + ' (' + APP.time + ')…');
+  try{
+    const r = await jfetch(req.url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(req.body)});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || 'the app failed');
+    const meta = APP.name + (d.took ? ' · ' + d.took + 's' : '');
+    if(req.kind === 'video'){ LAST = d.url.split('/').pop(); showVideo(d.url + '?t=' + Date.now(), meta); }
+    else{ ILAST = d.url.split('/').pop(); showImage(d.url + '?t=' + Date.now(), meta); }
+    loadGallery();
+  }catch(e){ $('#aerr').textContent = e.message; $('#viewer').innerHTML = '<div class="placeholder">That run did not finish.</div>'; }
+  setBusy(false);
+});
 
 // ---------------- Cinema Studio (Oct 20 2026) ----------------
 let CINEMA = null, CPICK = {genre:'general', era:'auto', light:'auto', camera:'modern', lens:'clean', aperture:'f4', pacing:'calm'}, CW = 1344, CH = 768, CIMG = null;
@@ -1147,6 +1237,8 @@ $('#tabs').addEventListener('click', e=>{
   $('#image-panel').style.display = TAB === 'image' ? 'flex' : 'none';
   $('#moves-panel').style.display = TAB === 'moves' ? 'flex' : 'none';
   $('#cinema-panel').style.display = TAB === 'cinema' ? 'flex' : 'none';
+  $('#apps-panel').style.display = TAB === 'apps' ? 'flex' : 'none';
+  if(TAB === 'apps' && !$('#appgrid').children.length) paintApps();
   if(TAB === 'cinema' && !CINEMA) loadCinema();
   if(TAB === 'moves' && !MOVES.length) loadMoves();
   $('#viewer').innerHTML = '<div class="placeholder">Nothing generated yet.</div>';

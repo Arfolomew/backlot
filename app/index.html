@@ -61,6 +61,12 @@
   .agrid figure{ margin:0; cursor:pointer; } .agrid img{ width:100%; border-radius:8px; display:block; }
   .agrid figcaption{ font-size:11px; color:var(--muted); margin-top:4px; }
   .agrid .pending{ aspect-ratio:2/3; border:1px dashed var(--line); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--muted); text-align:center; padding:6px; }
+  .auchips{ display:flex; flex-wrap:wrap; gap:6px; }
+  .auchips .ratio{ padding:6px 10px; font-size:12px; flex:none; }
+  .audiobox{ display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%; gap:14px; }
+  .audiobox audio{ width:70%; }
+  .audiobox .note{ font-size:40px; color:var(--muted); }
+  #gallery .gaud{ flex:none; height:100%; aspect-ratio:1; display:flex; align-items:center; justify-content:center; text-align:center; padding:6px; font-size:11px; background:#1a1c24; border-radius:8px; cursor:pointer; overflow:hidden; color:var(--muted); }
   .meta{ position:absolute; bottom:14px; left:14px; font-size:12px; color:var(--muted); background:rgba(0,0,0,.5); padding:5px 10px; border-radius:6px; }
   .spinner{ width:46px; height:46px; border:3px solid var(--line); border-top-color:var(--accent); border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 14px; }
   @keyframes spin{ to{ transform:rotate(360deg); } }
@@ -142,6 +148,7 @@
       <div class="tab" data-tab="moves">MOVES</div>
       <div class="tab" data-tab="cinema">CINEMA</div>
       <div class="tab" data-tab="apps">APPS</div>
+      <div class="tab" data-tab="audio">AUDIO</div>
     </div>
     <div class="status"><span class="dot" id="dot"></span><span id="statustxt">checking backend…</span></div>
   </header>
@@ -272,6 +279,43 @@
       <button class="gen" id="agen" style="display:none">Run</button>
       <div class="err" id="aerr"></div>
      </div><!-- /apps-panel -->
+
+     <div id="audio-panel" style="display:none; flex-direction:column; flex:1; min-height:0">
+      <label class="first">Engine</label>
+      <div class="modelpick" id="aupick">
+        <div class="ratio active" data-engine="song">Song (YuE2)</div>
+        <div class="ratio" data-engine="sfx">Sound FX (Stable Audio 3)</div>
+      </div>
+      <div class="hint" id="auhint">Lyrics and a style line in, a full song with vocals out. 48 kHz, about 15 s per 30 s of song.</div>
+      <div id="au-song">
+        <label>Style</label>
+        <input type="text" id="austyle" placeholder="pop, upbeat, female vocal, bright synths, 120 bpm">
+        <label>Lyrics</label>
+        <textarea id="aulyrics" placeholder="[verse]&#10;Morning light on the harbor wall&#10;[chorus]&#10;We sail on, we sail on"></textarea>
+        <div class="hint">Section tags like [verse], [chorus], [bridge] steer the structure. For an instrumental, pick the Instrumental flavor and give section tags only.</div>
+        <label>Plan</label>
+        <div class="ratios" id="auplan">
+          <div class="ratio active" data-plan="off">Off</div>
+          <div class="ratio" data-plan="full">Full</div>
+          <div class="ratio" data-plan="melody">Melody</div>
+        </div>
+        <div class="hint">Off sings the lyrics straight (clearest delivery, best for rap). Full writes a section plan and melody first. Melody plans only.</div>
+        <label>Flavor (optional)</label>
+        <div class="auchips" id="auloras"></div>
+        <div class="hint">YuE2 LoRAs at their authors&rsquo; default strengths. Pick one voice and one genre at most; stacking more muddies the mix.</div>
+      </div>
+      <div id="au-sfx" style="display:none">
+        <label>Describe the sound</label>
+        <textarea id="auprompt" placeholder="A heavy wooden door creaks open slowly, old iron hinges, stone hallway reverb"></textarea>
+        <div class="hint">One sound, one place, one texture. Works for music beds too (&ldquo;warm lo-fi piano loop, vinyl crackle, 80 bpm&rdquo;). Up to 45 s.</div>
+      </div>
+      <label>Length <span class="val" id="aulenv" style="float:right">60 s</span></label>
+      <div class="slider-row"><input type="range" id="aulen" min="10" max="240" step="5" value="60"></div>
+      <label>Seed (-1 = random)</label>
+      <input type="number" id="auseed" value="-1">
+      <button class="gen" id="augen">Generate Audio</button>
+      <div class="err" id="auerr"></div>
+     </div><!-- /audio-panel -->
 
      <div id="cinema-panel" style="display:none; flex-direction:column; flex:1; min-height:0">
       <label class="first">Cinema Studio</label>
@@ -928,7 +972,7 @@ function cropNote(){
 
 function setBusy(on, msg){
   BUSY = on;
-  $('#gen').disabled = on; $('#mgen').disabled = on; $('#cgen').disabled = on; $('#agen').disabled = on; $('#upscale').disabled = on; $('#igen').disabled = on; $('#ivert').disabled = on || !ILAST; $('#iup').disabled = on || !ILAST; $('#iupload').disabled = on;
+  $('#gen').disabled = on; $('#mgen').disabled = on; $('#cgen').disabled = on; $('#agen').disabled = on; $('#augen').disabled = on; $('#upscale').disabled = on; $('#igen').disabled = on; $('#ivert').disabled = on || !ILAST; $('#iup').disabled = on || !ILAST; $('#iupload').disabled = on;
   if(on){
     $('#viewer').innerHTML = '<div class="placeholder"><div class="spinner"></div>' + (msg||'working…') + '</div>';
   }
@@ -1035,10 +1079,18 @@ $('#vidfile').addEventListener('change', e=>{
 
 function loadGallery(){
   // The strip always mirrors the tab you are on: clips under Video, stills under Image.
-  const img = TAB === 'image';
-  fetch('/api/gallery?kind=' + (img ? 'image' : 'video')).then(r=>r.json()).then(d=>{
-    const base = img ? '/images/' : '/outputs/';
+  const img = TAB === 'image', aud = TAB === 'audio';
+  fetch('/api/gallery?kind=' + (img ? 'image' : aud ? 'audio' : 'video')).then(r=>r.json()).then(d=>{
+    const base = img ? '/images/' : aud ? '/audio/' : '/outputs/';
     GTAGS = d.tags || {};
+    if(aud){
+      $('#gallery').innerHTML = (d.files||[]).map(f => { const t = GTAGS[f]; return '<div class="gaud" data-f="'+f+'" title="'+f+'">&#9835; '+(t ? t.label : f.replace(/\.mp3$/,''))+'</div>'; }).join('');
+      document.querySelectorAll('#gallery .gaud').forEach(el => el.addEventListener('click', () => {
+        const t = GTAGS[el.dataset.f];
+        showAudio(base + encodeURIComponent(el.dataset.f), t ? t.label + (t.seed != null ? ' · seed ' + t.seed : '') : el.dataset.f);
+      }));
+      return;
+    }
     $('#gallery').innerHTML = (d.files||[]).map(f => { const t = GTAGS[f]; const tt = (t ? t.label + ' · ' : '') + f; return img
       ? '<img src="'+base+encodeURIComponent(f)+'" loading="lazy" title="'+tt+'" alt="">'
       : '<video src="'+base+encodeURIComponent(f)+'" muted preload="metadata" title="'+tt+'"></video>'; }
@@ -1060,6 +1112,73 @@ function loadGallery(){
   }).catch(()=>{});
 }
 loadGallery();
+
+// ---------------- Audio (Oct 20 2026) ----------------
+// Song = YuE2 (lyrics + style + optional LoRA flavors). Sound FX = Stable Audio 3 Medium.
+let AENGINE = 'song';
+function showAudio(url, meta){
+  $('#viewer').innerHTML = '<div class="audiobox"><div class="note">&#9835;</div><audio src="'+url+'" controls autoplay></audio></div>'
+    + (meta ? '<div class="meta">'+meta+'</div>' : '');
+}
+function paintAudio(){
+  const song = AENGINE === 'song', len = $('#aulen');
+  $('#au-song').style.display = song ? 'block' : 'none';
+  $('#au-sfx').style.display = song ? 'none' : 'block';
+  $('#auhint').textContent = song
+    ? 'Lyrics and a style line in, a full song with vocals out. 48 kHz, about 15 s per 30 s of song.'
+    : 'Any sound effect, ambience or short music bed from a sentence. Stable Audio 3 Medium, 8 steps, about 1 s per second of audio.';
+  if(song){ len.min = 10; len.max = 240; len.step = 5; if(+len.value < 10) len.value = 60; }
+  else { len.min = 1; len.max = 45; len.step = 1; if(+len.value > 45) len.value = 6; }
+  $('#aulenv').textContent = len.value + ' s';
+}
+$('#aulen').addEventListener('input', () => { $('#aulenv').textContent = $('#aulen').value + ' s'; });
+$('#aupick').addEventListener('click', e => {
+  const b = e.target.closest('.ratio'); if(!b || BUSY) return;
+  document.querySelectorAll('#aupick .ratio').forEach(x => x.classList.remove('active'));
+  b.classList.add('active'); AENGINE = b.dataset.engine; paintAudio();
+});
+$('#auplan').addEventListener('click', e => {
+  const b = e.target.closest('.ratio'); if(!b || BUSY) return;
+  document.querySelectorAll('#auplan .ratio').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+});
+function loadAudioLoras(){
+  fetch('/api/audio/loras').then(r => r.json()).then(list => {
+    $('#auloras').innerHTML = list.map(l => '<div class="ratio" data-file="'+l.file+'" title="'+l.file+'">'+l.label+'</div>').join('');
+  }).catch(()=>{});
+}
+$('#auloras').addEventListener('click', e => {
+  const b = e.target.closest('.ratio'); if(!b || BUSY) return;
+  b.classList.toggle('active');
+});
+$('#augen').addEventListener('click', async () => {
+  $('#auerr').textContent = '';
+  const song = AENGINE === 'song';
+  const body = { engine: AENGINE, mode: AENGINE, seconds: +$('#aulen').value, seed: parseInt($('#auseed').value || '-1') };
+  if(song){
+    body.style = $('#austyle').value.trim(); body.lyrics = $('#aulyrics').value.trim();
+    body.plan = document.querySelector('#auplan .ratio.active').dataset.plan;
+    body.loras = [...document.querySelectorAll('#auloras .ratio.active')].map(x => ({file: x.dataset.file}));
+    body.prompt = body.style;
+    if(!body.style){ $('#auerr').textContent = 'Give the song a style line first.'; return; }
+    if(!body.lyrics){ $('#auerr').textContent = 'Write some lyrics, or section tags for an instrumental.'; return; }
+  } else {
+    body.prompt = $('#auprompt').value.trim();
+    if(!body.prompt){ $('#auerr').textContent = 'Describe the sound first.'; return; }
+  }
+  setBusy(true, song ? 'writing and singing on YuE2… about ' + Math.round(body.seconds / 2) + ' s' : 'rendering on Stable Audio 3… about ' + Math.max(3, body.seconds) + ' s');
+  try{
+    const r = await fetch('/api/audio', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || 'generation failed');
+    showAudio(d.url + '?t=' + Date.now(), d.seconds + ' s · seed ' + d.seed + ' · ' + d.took + 's · ' + (song ? 'YuE2' : 'Stable Audio 3'));
+    loadGallery();
+  }catch(e){
+    $('#auerr').textContent = e.message;
+    $('#viewer').innerHTML = '<div class="placeholder">That run did not finish.</div>';
+  }finally{ setBusy(false); }
+});
+paintAudio();
 
 // ---------------- Apps (Oct 20 2026) ----------------
 // Each app = a saved recipe over an endpoint that already exists. Inputs are declared, the form is built from them.
@@ -1270,6 +1389,8 @@ $('#tabs').addEventListener('click', e=>{
   $('#moves-panel').style.display = TAB === 'moves' ? 'flex' : 'none';
   $('#cinema-panel').style.display = TAB === 'cinema' ? 'flex' : 'none';
   $('#apps-panel').style.display = TAB === 'apps' ? 'flex' : 'none';
+  $('#audio-panel').style.display = TAB === 'audio' ? 'flex' : 'none';
+  if(TAB === 'audio' && !$('#auloras').children.length) loadAudioLoras();
   if(TAB === 'apps' && !$('#appgrid').children.length) paintApps();
   if(TAB === 'cinema' && !CINEMA) loadCinema();
   if(TAB === 'moves' && !MOVES.length) loadMoves();

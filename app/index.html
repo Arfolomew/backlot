@@ -160,6 +160,7 @@
       <label class="first">Pick a Model</label>
       <div class="modelpick" id="modelpick">
         <div class="ratio active" data-model="minimax">MiniMax</div>
+        <div class="ratio" data-model="ltx25">LTX-2.5</div>
       </div>
       <div class="hint" id="modelhint">MiniMax H3 · local · text and image to video with audio.</div>
 
@@ -686,11 +687,26 @@ function status(){
 }
 status(); setInterval(status, 6000);
 
+let VMODEL = 'minimax';
+function paintVModel(){
+  const ltx = VMODEL === 'ltx25';
+  $('#modelhint').textContent = ltx
+    ? 'LTX-2.5 distilled · local · text and image to video with audio · the fast one: 8 + 3 steps, about 2 to 4 min a clip.'
+    : 'MiniMax H3 · local · text and image to video with audio.';
+  document.querySelectorAll('#vmode .ratio').forEach(x => { x.style.display = (ltx && !['t2v','i2v'].includes(x.dataset.mode)) ? 'none' : ''; });
+  const cam = $('#camera').closest('.chk');
+  [cam.previousElementSibling, cam, $('#camrow'), $('#camhint')].forEach(e => { if(e) e.style.display = ltx ? 'none' : ''; });
+  if(ltx && !['t2v','i2v'].includes(VMODE)) document.querySelector('#vmode .ratio[data-mode="t2v"]').click();
+  if(!ltx){ $('#camrow').style.display = $('#camera').checked ? '' : 'none'; $('#camhint').style.display = $('#camera').checked ? '' : 'none'; }
+  $('#lenhint').textContent = ltx
+    ? 'LTX-2.5 renders at 24 fps on a 64-pixel grid; 1344x768 becomes 1344x768, 5 s is 121 frames. Measured on this card: see the README table.'
+    : LENHINT;
+}
+const LENHINT = $('#lenhint').textContent;
 $('#modelpick').addEventListener('click', e=>{
-  const b = e.target.closest('.ratio'); if(!b) return;
+  const b = e.target.closest('.ratio'); if(!b || BUSY) return;
   document.querySelectorAll('#modelpick .ratio').forEach(x=>x.classList.remove('active'));
-  b.classList.add('active');
-  $('#modelhint').textContent = 'MiniMax H3 · local · text and image to video with audio.';
+  b.classList.add('active'); VMODEL = b.dataset.model; paintVModel();
 });
 
 $('#vmode').addEventListener('click', e=>{
@@ -998,10 +1014,10 @@ $('#gen').addEventListener('click', async ()=>{
   if(VMODE === 'i2v' && !VIMG){ fail('Image to Video needs an input image.'); return; }
   if(VMODE === 'ref' && !VREFS.length){ fail('Reference mode needs at least one image.'); return; }
   if(/[A-Z]{3,}/.test(prompt) && !confirm('The prompt still has TEMPLATE PLACEHOLDERS in caps. Generate anyway?')) return;
-  setBusy(true, VMODE === 'orbit' ? 'rendering a 360 orbit (ORB360)… about 12 min' : 'generating on MiniMax H3… first run loads a 10GB model');
+  setBusy(true, VMODEL === 'ltx25' ? 'generating on LTX-2.5… about 2 to 4 min' : VMODE === 'orbit' ? 'rendering a 360 orbit (ORB360)… about 12 min' : 'generating on MiniMax H3… first run loads a 10GB model');
   try{
     const r = await jfetch('/api/video', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({mode:VMODE, prompt, width:VW, height:VH,
+      body: JSON.stringify({mode:VMODE, prompt, width:VW, height:VH, model: VMODEL, label: VMODEL === 'ltx25' ? 'LTX-2.5 ' + (VMODE === 'i2v' ? 'Image to Video' : 'Video') : undefined,
         seconds: parseFloat($('#seconds').value), seed: parseInt($('#seed').value || '-1'),
         image: VMODE === 'i2v' ? VIMG : null,
         images: (VMODE === 'ref' || VMODE === 'orbit') ? VREFS.map(r => r.data) : null,

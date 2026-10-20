@@ -30,6 +30,7 @@ from workflows.build_h3_workflow import CAMERA_LORA, CAMERA_TRIGGER   # noqa: E4
 from workflows.build_ref2va_workflow import build as build_ref2va      # noqa: E402
 from workflows.build_postfx_workflow import build as build_postfx    # noqa: E402
 from workflows.build_krea_workflow import build as build_krea        # noqa: E402
+from workflows.build_ltx25_workflow import build as build_ltx25      # noqa: E402
 from workflows.build_seedvr2_video_workflow import build as build_seedvr2_video   # noqa: E402
 from comfy_backend import Backend, gpu_used_mib   # noqa: E402
 
@@ -198,6 +199,8 @@ def compose_move_prompt(move, subject):
             "overall_soundscape: natural ambience matching the scene, subtle and continuous.\n\n"
             "non_diegetic_music: none")
 
+LTX_FPS = 24
+LTX_MAX_SECONDS = 10.0
 H3_STEPS = 8
 H3_HEAD_CHUNKS = 16
 H3_FPS = 24
@@ -821,6 +824,51 @@ class H(BaseHTTPRequestHandler):
                 seed = int(body.get("seed", -1))
                 if seed < 0:
                     seed = int.from_bytes(os.urandom(4), "big")
+
+                # ---- LTX-2.5 (Oct 20 2026): the fast second video model ----
+                # Distilled 22B, two-stage pixel pipeline from ComfyUI's own template (see
+                # workflows/build_ltx25_workflow.py). Text and Image to Video only; Moves, Cinema,
+                # Reference, Orbit and chaining stay on H3 because their LoRAs and prompt format are H3's.
+                if body.get("model") == "ltx25":
+                    if mode not in ("t2v", "i2v"):
+                        return self._send(400, json.dumps({"error": "LTX-2.5 does Text and Image to Video here"}))
+                    seconds = max(2.0, min(LTX_MAX_SECONDS, seconds))
+                    width = max(256, round(width / 64) * 64)
+                    height = max(256, round(height / 64) * 64)
+                    first_frame = None
+                    try:
+                        if mode == "i2v":
+                            img = body.get("image") or ""
+                            if not img:
+                                return self._send(400, json.dumps({"error": "an input image is required for Image to Video"}))
+                            from PIL import Image
+                            import io
+                            im = Image.open(io.BytesIO(base64.b64decode(img.split(",")[-1]))).convert("RGB")
+                            sw, sh = im.size
+                            if sw / sh > width / height:
+                                cw, ch = round(sh * width / height), sh
+                            else:
+                                cw, ch = sw, round(sw * height / width)
+                            x, y = (sw - cw) // 2, (sh - ch) // 2
+                            im = im.crop((x, y, x + cw, y + ch)).resize((width, height), Image.LANCZOS)
+                            buf = io.BytesIO()
+                            im.save(buf, "PNG")
+                            first_frame = upload_to_comfy(buf.getvalue(), f"backlot_ltx_i2v_{int(time.time())}.png")
+                        wf, frames = build_ltx25(prompt, width=width, height=height, seconds=seconds,
+                                                 fps=LTX_FPS, seed=seed, image=first_frame, prefix="video/LTX25")
+                        t0 = time.time()
+                        blob, ext, staged = submit_and_wait(wf, timeout=1800, exts=(".mp4", ".webm", ".mkv"))
+                        name, path = save_output(blob, kind="ltx-" + mode, ext=ext, staged=staged)
+                        return self._send(200, json.dumps({
+                            "url": f"/outputs/{name}", "file": path, "seed": seed, "frames": frames,
+                            "seconds": round(frames / LTX_FPS, 2), "took": round(time.time() - t0, 1),
+                            "mode": mode, "model": "ltx25", "width": width, "height": height}))
+                    finally:
+                        if first_frame:
+                            try:
+                                discard_upload(first_frame)
+                            except OSError:
+                                pass
 
                 # Camera Motion LoRA. Its trigger word has to LEAD the prompt.
                 # 🔴 For i2v the builder prepends MiniMax's required alignment

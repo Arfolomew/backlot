@@ -53,6 +53,12 @@ if [ "$ALL" = "--all" ]; then
   get Comfy-Org/YuE2                          checkpoints/yue2_3b_bf16.safetensors               checkpoints
   get Comfy-Org/stable-audio-3                checkpoints/stable_audio_3_medium.safetensors      checkpoints
   get Comfy-Org/stable-audio-3                text_encoders/t5gemma_b_b_ul2.safetensors          text_encoders
+  # LTX-2.5 distilled. The official Lightricks/LTX-2.5 repo is gated; these mirrors carry the same Comfy-format files.
+  get Winnougan/ltx-2.5-w4a8-convrot-int4-convrot-Winnougan-Blessing diffusion_models/ltx-2.5-22b-distilled-transformer-w4a8_convrot.safetensors diffusion_models
+  get Winnougan/ltx-2.5-w4a8-convrot-int4-convrot-Winnougan-Blessing text_encoders/gemma4-12b-with-proj-ltx-2.5-w4a8_convrot.safetensors text_encoders
+  get comfyicu/LTX-2.5                         vae/ltx-2.5-video-vae-bf16.safetensors             vae
+  get comfyicu/LTX-2.5                         vae/ltx-2.5-audio-vae-bf16.safetensors             vae
+  get comfyicu/LTX-2.5                         latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors latent_upscale_models
   get numz/SeedVR2_comfyUI                    seedvr2_ema_3b_fp8_e4m3fn.safetensors             SEEDVR2
   get numz/SeedVR2_comfyUI                    ema_vae_fp16.safetensors                          SEEDVR2
   get ai-forever/Real-ESRGAN                  RealESRGAN_x2.pth                                 upscale_models

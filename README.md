@@ -23,6 +23,8 @@ Click the poster to watch, or [open the MP4 directly](https://demos.onpointfl.co
 - Latent chaining: continue a clip from its last latent, so a scene can run as long as you like
   without a visible join (Motion Context).
 - Camera Motion LoRA, SeedVR2 or RealESRGAN upscaling, RIFE interpolation, 2x slow motion.
+- A second video model: LTX-2.5 distilled (text and image to video with audio) for fast drafts,
+  two-stage pixel pipeline straight from ComfyUI's template, on the same backend.
 
 **Stills (Krea 2 Turbo, Qwen Image 2.1, Qwen Image Edit 2511, MOSS-Image)**
 - Text to image, image to image, style reference, identity edit (same face and outfit in a new
@@ -74,7 +76,7 @@ no clip cap, no queue, and nothing leaving the machine.
 ## Requirements
 
 - Linux (tested on Ubuntu 24.04) or macOS, Python 3.10+.
-- A ComfyUI install (0.35 or newer; **0.38 or newer for Qwen Image 2.1**, **0.42 or newer for MOSS-Image**; YuE2 and Stable Audio 3 nodes are core since 0.38; everything here was last run on 0.42.1) with these node packs in `custom_nodes/`:
+- A ComfyUI install (0.35 or newer; **0.38 or newer for Qwen Image 2.1**, **0.42 or newer for MOSS-Image**; YuE2 and Stable Audio 3 nodes are core since 0.38; LTX-2.5 nodes are core in 0.42; everything here was last run on 0.42.1) with these node packs in `custom_nodes/`:
   - [city96/ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF)
   - [kijai/ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes)
   - [jlucasmcrell/ComfyUI-H3-Multishot](https://github.com/jlucasmcrell/ComfyUI-H3-Multishot)
@@ -205,6 +207,8 @@ folder, which is what makes it run unchanged against the cloud.
 | Qwen Image 2.1 instruction edit, about 1 MP | 26 s |
 | MOSS-Image still, 992x1504, 25 steps | 25 s cold, about 16 s warm |
 | MOSS-Image layout poster, 6 blocks, 992x1504 | 22 s |
+| LTX-2.5 text to video, 5 s at 1344x768, with audio | 62 s |
+| LTX-2.5 image to video, 4 s at 1344x768 | 56 s |
 | YuE2 song, 30 s, plan off, 32 steps | 14 s |
 | Stable Audio 3 sound effect, 6 s, 8 steps | 6 s |
 | H3 text to video, 5 s at 1344x768 | about 7.5 min |

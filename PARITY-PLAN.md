@@ -36,7 +36,18 @@ live link early if done. Source of truth for what to copy: `research/higgsfield/
   (8 lines, ends 118.1 s of 120) -> demo/voice/vo-v2.wav. Full 5-tab UI smoke passed, 0 JS errors.
 - 17:06 Character Swap end-to-end render started (tools/tests/swap_test.py, ~20 min).
 
-## Next, in order
+- 17:12 Character Swap e2e OK (426 s for the 5 s preview clip; face/coat swapped, motion + sea kept;
+  a ponytail trace lingers mid-clip = LoRA limit on long hair). Sample: app/previews/apps/.
+- 17:20 demo v2 rendered (120 s, -14.5 LUFS), clean-clone test ALL PASS.
+- **17:25 SHIPPED:** merged to main a024ed1, pushed, backlot-live restarted (5 tabs, 30 previews,
+  public link OK), demo v2 live at demos.onpointfl.com/backlot/. Dev servers stopped.
+
+## Remaining (optional polish)
+- dolly-zoom-in and freeze prompts (re-render those two previews, ~5 min).
+- Ref2VA references inside Cinema Studio (six-section prompt format).
+- Jake: post the round-3 drafts (SUBMISSION.md); add `force` to the Storage line in /etc/fstab.
+
+## Original plan (kept for reference)
 1. `PORT=8805 ... .venv/bin/python app/server.py` (env in this file's "Dev instance" below), then
    `.venv/bin/python tools/render_move_previews.py --server http://127.0.0.1:8805` for the other 27
    previews (~135 s each, ~1 h). Eyeball a few (dolly zoom, FPV, whip pan, the 3 effects).

@@ -366,6 +366,7 @@
       <div class="modelpick" id="imodel">
         <div class="ratio active" data-model="krea2">Krea 2 Turbo</div>
         <div class="ratio" data-model="qwen21">Qwen 2.1</div>
+        <div class="ratio" data-model="moss">MOSS Text</div>
       </div>
       <div class="hint" id="imodelhint">Flux2-family, fp8, local. Distilled turbo, so there is no CFG and no negative prompt.</div>
       <div class="chk" id="itrans-box" style="display:none">
@@ -381,6 +382,24 @@
         <div class="ratio" data-mode="identity">Identity</div>
         <div class="ratio" data-mode="edit">Edit</div>
         <div class="ratio" data-mode="angles">Angles</div>
+        <div class="ratio" data-mode="layout" style="display:none">Layout</div>
+      </div>
+
+      <div id="imoss-layout" style="display:none">
+        <label>Headline</label>
+        <input type="text" id="ml-headline" placeholder="FITZGERALD'S IRISH TAVERN">
+        <label>Subhead</label>
+        <input type="text" id="ml-subhead" placeholder="Weekday Specials">
+        <label>Lines (one per line)</label>
+        <textarea id="ml-lines" rows="4" placeholder="MONDAY  $3 Guinness Pints&#10;TUESDAY  Half-Price Wings"></textarea>
+        <label>Illustration</label>
+        <input type="text" id="ml-art" placeholder="Hand-drawn ink pint glass beside a plate of wings">
+        <label>Footer</label>
+        <input type="text" id="ml-footer" placeholder="DOWNTOWN NEW PORT RICHEY">
+        <label>Web address</label>
+        <input type="text" id="ml-url" placeholder="fitzgeraldstavern.com">
+        <div class="hint">Every filled field becomes one block, stacked top to bottom in this order; empty fields drop out.
+          The prompt above describes the whole poster (colors, paper, mood). Each word renders exactly as typed, so proof-read here, not after.</div>
       </div>
 
       <div id="isrc-box" style="display:none">
@@ -456,6 +475,11 @@
         </div>
         <div class="hint" id="iang-count"></div>
       </div>
+      <div id="imoss-note" style="display:none" class="hint"><b>MOSS-Image</b> (25 steps, about 16 s). The one model here that spells:
+        every prompted word correct in our tests, including a five-line price list and a URL. Put the words you want
+        in quotes in <b>Text</b> mode, or use <b>Layout</b> for a poster, menu, business card or book page with each block where you put it.
+        Say &ldquo;no visible text&rdquo; when you want none: left alone it invents lettering on signs and windows. Photoreal is good but
+        Krea is better; illustration matches Qwen 2.1. Renders are capped at 1.5 MP. Needs ComfyUI 0.42 or newer.</div>
       <div id="iqwen-note" style="display:none" class="hint"><b>Qwen 2.1</b> (Kijai turbo LoRA, 8 steps, about 30 s).
         Oct 9 bake-off: strong for transparent cutouts, chalkboard/menu text and edits that must not invent things.
         &#x1F534; Misspelled &ldquo;CAPT&rsquo;N&rdquo; as &ldquo;CAPT&rsquo;AN&rdquo; 6 of 6 times: proof-read every client name.
@@ -1329,13 +1353,18 @@ $('#igen').addEventListener('click', async ()=>{
   if(IMODE === 'angles') return runAngles();
   const prompt = $('#iprompt').value.trim();
   $('#ierr').textContent = '';
-  if(!prompt){ $('#ierr').textContent = 'Write a prompt first.'; return; }
-  if(/[A-Z]{3,}/.test(prompt) && !confirm('The prompt still has TEMPLATE PLACEHOLDERS in caps. Generate anyway?')) return;
+  if(!prompt && !(IMODEL === 'moss' && IMODE === 'layout')){ $('#ierr').textContent = 'Write a prompt first.'; return; }
+  if(IMODEL !== 'moss' && /[A-Z]{3,}/.test(prompt) && !confirm('The prompt still has TEMPLATE PLACEHOLDERS in caps. Generate anyway?')) return;
   const steps = posToSteps(+$('#steps').value);
-  if(IMODE !== 'text' && !ISRC_DATA && !ISRC_NAME){ $('#ierr').textContent = 'Add an input image first.'; return; }
-  const label = {text:'', img2img:' (image to image)', reference:' (style reference)', identity:' (identity)', edit:' (Qwen edit)'}[IMODE];
-  const qwen = IMODEL === 'qwen21', trans = qwen && $('#itrans').checked;
-  setBusy(true, qwen ? (IMODE === 'edit' ? 'editing with Qwen 2.1' : 'generating on Qwen 2.1') + (trans ? ' (transparent)' : '') + '… about 30 s'
+  const noSrc = IMODE === 'text' || IMODE === 'layout';
+  if(!noSrc && !ISRC_DATA && !ISRC_NAME){ $('#ierr').textContent = 'Add an input image first.'; return; }
+  const label = {text:'', layout:' (layout)', img2img:' (image to image)', reference:' (style reference)', identity:' (identity)', edit:' (Qwen edit)'}[IMODE];
+  const qwen = IMODEL === 'qwen21', trans = qwen && $('#itrans').checked, mossOn = IMODEL === 'moss';
+  const layout = mossOn && IMODE === 'layout' ? {headline: $('#ml-headline').value, subhead: $('#ml-subhead').value, lines: $('#ml-lines').value,
+    art: $('#ml-art').value, footer: $('#ml-footer').value, url: $('#ml-url').value} : null;
+  if(layout && !Object.values(layout).some(v => v.trim())){ $('#ierr').textContent = 'Fill in at least one layout field.'; return; }
+  setBusy(true, mossOn ? 'generating on MOSS-Image' + label + '… about 16 s'
+    : qwen ? (IMODE === 'edit' ? 'editing with Qwen 2.1' : 'generating on Qwen 2.1') + (trans ? ' (transparent)' : '') + '… about 15 s'
     : IMODE === 'edit' ? 'editing with Qwen-Image-Edit… about 25 s' : 'generating on Krea 2 Turbo' + label + '… ' + steps + ' steps');
   try{
     const r = await jfetch('/api/image', {method:'POST', headers:{'Content-Type':'application/json'},
@@ -1343,10 +1372,10 @@ $('#igen').addEventListener('click', async ()=>{
         seed: parseInt($('#iseed').value || '-1'),
         prompt_weight: $('#pweight').checked,
         mode: IMODE,
-        model: IMODEL, transparent: trans,
+        model: IMODEL, transparent: trans, layout,
         extra_images: qwen && IMODE === 'edit' ? IEXTRA : [],
-        image: IMODE !== 'text' ? ISRC_DATA : null,
-        source: IMODE !== 'text' ? ISRC_NAME : null,
+        image: noSrc ? null : ISRC_DATA,
+        source: noSrc ? null : ISRC_NAME,
         denoise: +$('#idenoise').value / 100})});
     const d = await r.json();
     if(!r.ok) throw new Error(d.error || 'generation failed');
@@ -1355,7 +1384,8 @@ $('#igen').addEventListener('click', async ()=>{
     showImage(d.url + '?t=' + Date.now(),
       d.width + '×' + d.height + ' · ' + d.steps + ' steps · seed ' + d.seed + ' · ' + d.took + 's'
       + (d.mode && d.mode !== 'text' ? ' · ' + d.mode + (d.denoise ? ' ' + d.denoise : '') : '')
-      + (d.model === 'qwen21' ? ' · Qwen 2.1' + (d.refs > 1 ? ' · ' + d.refs + ' refs' : '') + (d.transparent ? ' · transparent' : '') : ''));
+      + (d.model === 'qwen21' ? ' · Qwen 2.1' + (d.refs > 1 ? ' · ' + d.refs + ' refs' : '') + (d.transparent ? ' · transparent' : '') : '')
+      + (d.model === 'moss' ? ' · MOSS-Image' : ''));
     loadGallery();
   }catch(e){
     $('#ierr').textContent = e.message;
@@ -1370,7 +1400,8 @@ document.querySelectorAll('#imode .ratio').forEach(el => el.addEventListener('cl
   document.querySelectorAll('#imode .ratio').forEach(x => x.classList.remove('active'));
   el.classList.add('active'); IMODE = el.dataset.mode;
   paintModel();
-  $('#isrc-box').style.display = IMODE === 'text' ? 'none' : 'block';
+  $('#isrc-box').style.display = (IMODE === 'text' || IMODE === 'layout') ? 'none' : 'block';
+  $('#imoss-layout').style.display = (IMODEL === 'moss' && IMODE === 'layout') ? 'block' : 'none';
   $('#idenoise-box').style.display = IMODE === 'img2img' ? 'block' : 'none';
   $('#iref-note').style.display = IMODE === 'reference' ? 'block' : 'none';
   $('#iid-note').style.display = IMODE === 'identity' ? 'block' : 'none';
@@ -1401,25 +1432,31 @@ $('#idenoise').addEventListener('input', paintDenoise); paintDenoise();
 let IMODEL = 'krea2', IEXTRA = [];
 const KREA_HINT = $('#imodelhint').innerHTML;
 function paintModel(){
-  const qwen = IMODEL === 'qwen21';
+  const qwen = IMODEL === 'qwen21', mossOn = IMODEL === 'moss';
   document.querySelectorAll('#imode .ratio').forEach(x => {
-    const ok = (!qwen || x.dataset.mode === 'text' || x.dataset.mode === 'edit');
+    const m = x.dataset.mode;
+    const ok = mossOn ? (m === 'text' || m === 'layout') : m !== 'layout' && (!qwen || m === 'text' || m === 'edit');
     x.style.display = ok ? '' : 'none';
   });
-  $('#imodelhint').innerHTML = qwen
+  $('#imodelhint').innerHTML = mossOn
+    ? 'MOSS-Image, INT8, local. 25 steps, CFG 2.5, built for rendering real words.'
+    : qwen
     ? 'Qwen Image 2.1 + turbo LoRA, INT8, local. 8 steps, no negative prompt.'
     : KREA_HINT;
   $('#itrans-box').style.display = qwen ? 'flex' : 'none';
   $('#iextra-box').style.display = qwen && IMODE === 'edit' ? 'block' : 'none';
   $('#iqwen-note').style.display = qwen ? 'block' : 'none';
+  $('#imoss-note').style.display = mossOn ? 'block' : 'none';
+  $('#imoss-layout').style.display = (mossOn && IMODE === 'layout') ? 'block' : 'none';
   const sr = $('#steps').closest('.slider-row');
-  [sr, sr.previousElementSibling, $('#stepshint')].forEach(e => e.style.display = qwen ? 'none' : '');
+  [sr, sr.previousElementSibling, $('#stepshint')].forEach(e => e.style.display = (qwen || mossOn) ? 'none' : '');
 }
 $('#imodel').addEventListener('click', e => {
   const b = e.target.closest('.ratio'); if(!b || BUSY) return;
   document.querySelectorAll('#imodel .ratio').forEach(x => x.classList.remove('active'));
   b.classList.add('active'); IMODEL = b.dataset.model;
-  if((IMODEL === 'qwen21' && IMODE !== 'text' && IMODE !== 'edit') || (IMODEL !== 'krea2' && IMODE === 'angles'))
+  if((IMODEL === 'qwen21' && IMODE !== 'text' && IMODE !== 'edit') || (IMODEL !== 'krea2' && IMODE === 'angles')
+     || (IMODEL === 'moss' && IMODE !== 'text' && IMODE !== 'layout') || (IMODEL !== 'moss' && IMODE === 'layout'))
     document.querySelector('#imode .ratio[data-mode="text"]').click();
   else { paintModel(); document.querySelector('#imode .ratio.active').click(); }
 });
@@ -1551,7 +1588,7 @@ function paintAngleMode(){
   $('#iangle-box').style.display = on ? 'block' : 'none';
   const pr = $('#iprompt'), ra = $('#iratio'), sr = $('#steps').closest('.slider-row');
   [pr, pr.previousElementSibling, ra, ra.previousElementSibling, $('#idimhint')].forEach(e => e.style.display = on ? 'none' : '');
-  if(IMODEL !== 'qwen21') [sr, sr.previousElementSibling, $('#stepshint')].forEach(e => e.style.display = on ? 'none' : '');
+  if(IMODEL !== 'qwen21' && IMODEL !== 'moss') [sr, sr.previousElementSibling, $('#stepshint')].forEach(e => e.style.display = on ? 'none' : '');
   $('#igen').textContent = on ? 'Make Angles' : 'Generate Image';
   if(on) paintAngleCount();
 }

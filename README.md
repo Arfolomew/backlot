@@ -24,10 +24,13 @@ Click the poster to watch, or [open the MP4 directly](https://demos.onpointfl.co
   without a visible join (Motion Context).
 - Camera Motion LoRA, SeedVR2 or RealESRGAN upscaling, RIFE interpolation, 2x slow motion.
 
-**Stills (Krea 2 Turbo, Qwen Image 2.1, Qwen Image Edit 2511)**
+**Stills (Krea 2 Turbo, Qwen Image 2.1, Qwen Image Edit 2511, MOSS-Image)**
 - Text to image, image to image, style reference, identity edit (same face and outfit in a new
   scene), instruction edit, and camera angles (re-shoot a photo from 96 camera positions).
 - Transparent PNG output, vertical crops for phones, SeedVR2 4K upscale.
+- MOSS-Image for anything with words on it: posters, menus, cards, book pages. Text mode renders
+  the words you quote; Layout mode is a poster form (headline, lines, illustration, footer, URL) and
+  each block lands where you put it.
 
 Every render is sent as a job through the Comfy SDK. Locally the SDK talks to
 [`comfy-api-proxy`](https://pypi.org/project/comfy-api-proxy/), which serves the Comfy API in front
@@ -66,7 +69,7 @@ no clip cap, no queue, and nothing leaving the machine.
 ## Requirements
 
 - Linux (tested on Ubuntu 24.04) or macOS, Python 3.10+.
-- A ComfyUI install (0.35 or newer; **0.38 or newer for Qwen Image 2.1**, whose native nodes arrived after 0.35) with these node packs in `custom_nodes/`:
+- A ComfyUI install (0.35 or newer; **0.38 or newer for Qwen Image 2.1**, **0.42 or newer for MOSS-Image**; everything here was last run on 0.42.1) with these node packs in `custom_nodes/`:
   - [city96/ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF)
   - [kijai/ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes)
   - [jlucasmcrell/ComfyUI-H3-Multishot](https://github.com/jlucasmcrell/ComfyUI-H3-Multishot)
@@ -195,6 +198,8 @@ folder, which is what makes it run unchanged against the cloud.
 | Latent chain, clip 2 continuing clip 1 (3 s each) | 164 s + 174 s, join drift 2.9/255 mean pixel difference |
 | Qwen Image 2.1 still, 1152x768, 8 steps | 21 s warm |
 | Qwen Image 2.1 instruction edit, about 1 MP | 26 s |
+| MOSS-Image still, 992x1504, 25 steps | 25 s cold, about 16 s warm |
+| MOSS-Image layout poster, 6 blocks, 992x1504 | 22 s |
 | H3 text to video, 5 s at 1344x768 | about 7.5 min |
 
 H3 is slow on 16 GB because the 13.6 GB text encoder has to run on the CPU. That is the trade

@@ -83,6 +83,59 @@ with open(os.path.join(HERE, "moves.json")) as _f:
     MOVES = {m["id"]: m for m in json.load(_f)["moves"]}
 PREVIEW_DIR = os.path.join(HERE, "previews")
 
+# Cinema Studio (Oct 20 2026): pickers -> one H3 prompt in the model's own three-field,
+# multi-shot format. Catalog of fragments in cinema.json.
+with open(os.path.join(HERE, "cinema.json")) as _f:
+    CINEMA = json.load(_f)
+
+def _pick(group, key):
+    items = CINEMA[group]
+    for it in items:
+        if it["key"] == key:
+            return it
+    return items[0]
+
+def _mmss(t):
+    return "%02d:%06.3f" % (int(t // 60), t % 60)
+
+def compose_cinema_prompt(o):
+    """o: {scene, shots?, genre, era, light, camera, lens, aperture, pacing, seconds}.
+    Returns (prompt, cuts). 'shots' = optional list of per-shot lines (custom mode);
+    otherwise every shot restates the same scene from the ladder's framing."""
+    scene = " ".join(str(o.get("scene") or "").split()).rstrip(".")
+    seconds = max(2.0, min(10.0, float(o.get("seconds") or 5)))
+    genre = _pick("genre", o.get("genre") or "general")
+    era = _pick("era", o.get("era") or "auto")
+    light = _pick("light", o.get("light") or "auto")
+    cam = _pick("camera", o.get("camera") or "modern")
+    lens = _pick("lens", o.get("lens") or "clean")
+    ap = _pick("aperture", o.get("aperture") or "f4")
+    pacing = _pick("pacing", o.get("pacing") or "single")
+    custom = [" ".join(x.split()).rstrip(".") for x in (o.get("shots") or []) if str(x).strip()]
+    # cut list in seconds, dropping cuts that would leave a shot shorter than 0.6 s
+    cuts = [round(f * seconds, 3) for f in pacing["cuts"]]
+    keep = [cuts[0]]
+    for c in cuts[1:]:
+        if c - keep[-1] >= 0.6 and seconds - c >= 0.6:
+            keep.append(c)
+    cuts = keep
+    ladder = pacing["ladder"]
+    style = ", ".join(x for x in [
+        "Live-action, cinematic", era["frag"], cam["frag"], lens["frag"], ap["frag"], light["frag"], genre["look"]] if x)
+    parts = []
+    for i, t in enumerate(cuts):
+        shot = CINEMA["shots"][ladder[i % len(ladder)]]
+        content = custom[i] if i < len(custom) else (scene if i == 0 else f"the same scene, {scene}")
+        if i == 0:
+            parts.append(f"[Shot 1] {style}, {shot['frame']} frames {content}. {shot['motion']}")
+        else:
+            parts.append(f"[Shot {i + 1}] At {_mmss(t)}, the camera cuts to {shot['frame']} of {content}. {shot['motion']}")
+    prompt = ("integrated_multimodal_description: " + " ".join(parts) + "\n\n"
+              f"overall_soundscape: {genre['sound']}, continuous across every cut.\n\n"
+              f"non_diegetic_music: {genre['music']}")
+    return prompt, cuts
+
+
 def compose_move_prompt(move, subject):
     """Turn a Move + the user's subject line into the prompt H3 gets.
     Camera moves ride the Camera Motion LoRA, which was trained on comma lists
@@ -377,6 +430,8 @@ class H(BaseHTTPRequestHandler):
         if p.path in ("/", "/index.html"):
             with open(os.path.join(HERE, "index.html"), "rb") as f:
                 return self._send(200, f.read(), "text/html; charset=utf-8")
+        if p.path == "/api/cinema":
+            return self._send(200, json.dumps({k: v for k, v in CINEMA.items() if not k.startswith("_")}))
         if p.path == "/api/moves":
             out = []
             for m in MOVES.values():
@@ -496,6 +551,14 @@ class H(BaseHTTPRequestHandler):
         return self._dispatch(p, body)
 
     def _dispatch(self, p, body):
+        if p.path == "/api/cinema/compose":
+            try:
+                if not str(body.get("scene") or "").strip() and not any(str(x).strip() for x in (body.get("shots") or [])):
+                    return self._send(400, json.dumps({"error": "describe the scene first"}))
+                prompt, cuts = compose_cinema_prompt(body)
+                return self._send(200, json.dumps({"prompt": prompt, "cuts": cuts, "shots": len(cuts)}))
+            except Exception as e:
+                return self._send(400, json.dumps({"error": str(e)}))
         if p.path == "/api/video":
             try:
                 if not comfy_up():

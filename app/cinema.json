@@ -1,0 +1,63 @@
+{
+  "_about": "Backlot Cinema Studio (Oct 20 2026). Pickers that compose one MiniMax H3 prompt in the model's own three-field, multi-shot format ([Shot N] + cut times). Every option maps to a prompt fragment in our own words. Pacing = a cut list as fractions of the clip; the shot ladder gives each cut a framing and a camera move written in H3's motion vocabulary (push in, arc shot, tracking shot, static shot...).",
+  "genre": [
+    {"key": "general", "name": "General", "look": "clean cinematic grade, balanced contrast, natural color", "music": "none", "sound": "natural ambience matching the scene"},
+    {"key": "epic", "name": "Epic", "look": "grand scale, sweeping compositions, rich saturated color, deep shadows and bright highlights", "music": "a slow-building orchestral score with low strings and distant brass, swelling toward the end", "sound": "wide open-air ambience, wind, distant echoes"},
+    {"key": "drama", "name": "Drama", "look": "restrained grade, soft contrast, muted warm palette, intimate framing", "music": "a sparse piano theme, quiet and unhurried", "sound": "quiet room tone, small intimate sounds of movement and breath"},
+    {"key": "noir", "name": "Noir", "look": "high-contrast black and white with deep blacks, hard shadows, venetian-blind light, cigarette haze", "music": "a lonely muted trumpet over a slow upright bass", "sound": "rain on glass, distant traffic, a ticking clock"},
+    {"key": "comedy", "name": "Comedy", "look": "bright, evenly lit, punchy saturated color, wide flat compositions that leave room for the gag", "music": "a light bouncy ukulele and pizzicato strings", "sound": "lively everyday ambience, clear foley on every action"},
+    {"key": "horror", "name": "Horror", "look": "desaturated cold palette, crushed shadows, sickly green and amber practicals, unsettling negative space", "music": "a low sustained drone with rare sharp string stabs", "sound": "near silence broken by creaks, drips and a faint rising hum"},
+    {"key": "action", "name": "Action", "look": "teal and orange grade, hard directional light, motion blur on fast movement, gritty texture", "music": "driving percussive electronic score with a pulsing low end", "sound": "impacts, engines, crowd and wind, every hit lands with weight"}
+  ],
+  "era": [
+    {"key": "auto", "name": "Auto", "frag": ""},
+    {"key": "1960s", "name": "1960s", "frag": "set in the 1960s with period-correct cars, clothing and signage, Technicolor-style saturated dyes"},
+    {"key": "1980s", "name": "1980s", "frag": "set in the 1980s with period-correct cars, clothing and signage, neon accents and warm tungsten"},
+    {"key": "1990s", "name": "1990s", "frag": "set in the 1990s with period-correct cars, clothing and signage, slightly faded color and soft contrast"},
+    {"key": "2000s", "name": "2000s", "frag": "set in the 2000s with period-correct cars, phones, clothing and signage, early digital-video crispness"},
+    {"key": "2020s", "name": "2020s", "frag": "set in the present day, contemporary clothing, phones and vehicles"}
+  ],
+  "light": [
+    {"key": "auto", "name": "Auto", "frag": ""},
+    {"key": "silhouette", "name": "Silhouette", "frag": "the subject lit from behind so it reads as a dark silhouette against a bright background"},
+    {"key": "practicals", "name": "Practicals", "frag": "lit only by practical lights inside the scene, lamps, neon signs and screens, pools of light and dark between them"},
+    {"key": "window", "name": "Window", "frag": "soft directional daylight from a single large window, gentle falloff into shadow"},
+    {"key": "overhead", "name": "Overhead fall", "frag": "hard light falling straight down from above, bright on the top of the head and shoulders, eyes in shadow"},
+    {"key": "contre_jour", "name": "Contre jour", "frag": "shot into the light source with a glowing rim around the subject and lens flare"},
+    {"key": "soft_cross", "name": "Soft cross", "frag": "two soft sources crossing from either side, gentle modeling on the face, no hard shadows"}
+  ],
+  "camera": [
+    {"key": "modern", "name": "Modern digital", "frag": "shot on a modern digital cinema camera, clean and sharp with wide dynamic range"},
+    {"key": "35mm", "name": "35mm film", "frag": "shot on 35mm motion picture film with fine organic grain, halation on highlights and film color response"},
+    {"key": "8mm", "name": "8mm film", "frag": "shot on Super 8 film with heavy grain, soft focus, gate weave and faded warm colors"},
+    {"key": "dv", "name": "DV camcorder", "frag": "shot on a late-1990s DV camcorder with interlaced softness, slight color bleeding and auto-exposure pumping"}
+  ],
+  "lens": [
+    {"key": "clean", "name": "Clean sharp", "frag": "a clean modern prime lens, sharp edge to edge"},
+    {"key": "anamorphic", "name": "Anamorphic", "frag": "an anamorphic lens with oval bokeh and horizontal blue streak flares"},
+    {"key": "vintage_anamorphic", "name": "Vintage anamorphic", "frag": "a vintage anamorphic lens with soft edges, warm flares and gentle distortion"},
+    {"key": "warm_vintage", "name": "Warm vintage", "frag": "a warm vintage prime lens with low contrast and creamy glowing highlights"},
+    {"key": "halation", "name": "Halation vintage", "frag": "a vintage lens with strong halation blooming around every light source"}
+  ],
+  "aperture": [
+    {"key": "f1_4", "name": "f/1.4", "frag": "wide open at f/1.4, razor-thin depth of field, background melting into bokeh"},
+    {"key": "f4", "name": "f/4", "frag": "at f/4, the subject sharp with a softly blurred background"},
+    {"key": "f11", "name": "f/11", "frag": "at f/11, deep focus, foreground and background both sharp"}
+  ],
+  "pacing": [
+    {"key": "single", "name": "Single shot", "cuts": [0.0], "ladder": ["wide"]},
+    {"key": "calm", "name": "Calm", "cuts": [0.0, 0.282, 0.668], "ladder": ["wide", "medium", "close"]},
+    {"key": "dynamic", "name": "Dynamic", "cuts": [0.0, 0.149, 0.216, 0.369, 0.477, 0.618, 0.705, 0.797, 0.867], "ladder": ["wide", "detail", "medium", "close", "ots", "low", "close", "detail", "wide"]},
+    {"key": "chaotic", "name": "Chaotic", "cuts": [0.0, 0.087, 0.157, 0.282, 0.352, 0.473, 0.543, 0.647, 0.800, 0.867], "ladder": ["wide", "close", "detail", "low", "medium", "ecu", "ots", "whip", "close", "wide"]}
+  ],
+  "shots": {
+    "wide":   {"frame": "a wide establishing shot", "motion": "The camera pushes in with small amplitude at slow speed."},
+    "medium": {"frame": "a medium shot", "motion": "The camera holds a steady shot with a slight slow push in."},
+    "close":  {"frame": "a close-up", "motion": "The camera holds a static shot."},
+    "ecu":    {"frame": "an extreme close-up", "motion": "The camera holds a static shot."},
+    "detail": {"frame": "a detail insert shot", "motion": "The camera tracks slowly across the detail."},
+    "ots":    {"frame": "an over-the-shoulder shot", "motion": "The camera arcs slowly around the subject."},
+    "low":    {"frame": "a low-angle shot looking up", "motion": "The camera tilts up with small amplitude at slow speed."},
+    "whip":   {"frame": "a fast whip-pan to a new angle", "motion": "The camera pans right with large amplitude at fast speed, then settles."}
+  }
+}

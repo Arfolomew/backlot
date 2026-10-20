@@ -77,6 +77,25 @@ for _d in (VIDEO_DIR, IMAGE_DIR, TMP_DIR):
 #                  dequantizes ON-GPU -> OOM in dequantize_blocks_Q4_K if on CUDA.
 #   head_chunks 16 MiniMaxLowVRAMAttention; higher = less VRAM, slower (max 56).
 #   steps 8        with the 4-step turbo LoRA at strength 1.0.
+# Moves: one-click camera moves and effects (Oct 20 2026). Catalog in moves.json,
+# previews rendered by tools/render_move_previews.py into previews/moves/<id>.mp4.
+with open(os.path.join(HERE, "moves.json")) as _f:
+    MOVES = {m["id"]: m for m in json.load(_f)["moves"]}
+PREVIEW_DIR = os.path.join(HERE, "previews")
+
+def compose_move_prompt(move, subject):
+    """Turn a Move + the user's subject line into the prompt H3 gets.
+    Camera moves ride the Camera Motion LoRA, which was trained on comma lists
+    ('camera motion, subject, scene, move, look, quality'), so that is what we send.
+    Effects carry no LoRA and use the model's own three-field format."""
+    subject = " ".join(subject.split()).rstrip(".,;")
+    if move.get("lora"):
+        return (f"{CAMERA_TRIGGER}, {subject}, {move['move']}, "
+                "cinematic lighting, sharp detail, 4k, high quality")
+    return (f"integrated_multimodal_description: [Shot 1] {subject}. {move['move']}.\n\n"
+            "overall_soundscape: natural ambience matching the scene, subtle and continuous.\n\n"
+            "non_diegetic_music: none")
+
 H3_STEPS = 8
 H3_HEAD_CHUNKS = 16
 H3_FPS = 24
@@ -358,6 +377,24 @@ class H(BaseHTTPRequestHandler):
         if p.path in ("/", "/index.html"):
             with open(os.path.join(HERE, "index.html"), "rb") as f:
                 return self._send(200, f.read(), "text/html; charset=utf-8")
+        if p.path == "/api/moves":
+            out = []
+            for m in MOVES.values():
+                pv = os.path.join(PREVIEW_DIR, "moves", m["id"] + ".mp4")
+                d = {k: v for k, v in m.items() if k != "preview_subject"}
+                d["preview"] = f"/previews/moves/{m['id']}.mp4" if os.path.isfile(pv) else None
+                d["poster"] = (f"/previews/moves/{m['id']}.jpg"
+                               if os.path.isfile(pv[:-4] + ".jpg") else None)
+                out.append(d)
+            return self._send(200, json.dumps({"moves": out}))
+        if p.path.startswith("/previews/"):
+            rel = os.path.normpath(urllib.parse.unquote(p.path[len("/previews/"):]))
+            fp = os.path.join(PREVIEW_DIR, rel)
+            if rel.startswith("..") or not os.path.isfile(fp):
+                return self._send(404, json.dumps({"error": "not found"}))
+            mime = "video/mp4" if fp.endswith(".mp4") else "image/jpeg"
+            with open(fp, "rb") as f:
+                return self._send(200, f.read(), mime)
         if p.path == "/api/heartbeat":
             HEARTBEAT["last"] = time.time()
             HEARTBEAT["seen"] = True
@@ -466,6 +503,23 @@ class H(BaseHTTPRequestHandler):
                         {"error": BACKEND_DOWN}))
                 prompt = (body.get("prompt") or "").strip()
                 mode = (body.get("mode") or "t2v").lower()
+                # ---- Moves (Oct 20 2026): a preset composes the prompt + LoRA settings ----
+                move_id = (body.get("move") or "").strip()
+                move = None
+                if move_id:
+                    move = MOVES.get(move_id)
+                    if not move:
+                        return self._send(400, json.dumps({"error": f"unknown move: {move_id}"}))
+                    if mode not in ("t2v", "i2v"):
+                        return self._send(400, json.dumps({"error": "Moves work in Text and Image modes"}))
+                    subject = (body.get("subject") or prompt).strip()
+                    if not subject:
+                        return self._send(400, json.dumps({"error": "describe the subject first"}))
+                    prompt = compose_move_prompt(move, subject)
+                    body = dict(body)
+                    body["camera_motion"] = bool(move.get("lora"))
+                    body["camera_strength"] = float(move.get("strength") or 1.0)
+                    body.setdefault("seconds", move.get("seconds", 5))
                 if not prompt and mode != "orbit":   # orbit writes its own prompt
                     return self._send(400, json.dumps({"error": "prompt required"}))
                 width = int(body.get("width", 1344))

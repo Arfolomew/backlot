@@ -35,6 +35,7 @@ other repos; it is a different, larger quant.
 |---|---|---|---|---|
 | Camera motion | `camera_motion_h3_lora_v1_3000_pruned.safetensors` | [Jojocodex/minimax-h3-Camera-Motion-lora](https://huggingface.co/Jojocodex/minimax-h3-Camera-Motion-lora/resolve/main/camera_motion_h3_lora_v1_3000_pruned.safetensors) | 0.16 GB | `loras` |
 | 360 orbit | `h3-tier2/minimax_h3_orb360_step1500.safetensors` | [MATLOWAI/MiniMax-H3-ORB360-CardSpin](https://huggingface.co/MATLOWAI/MiniMax-H3-ORB360-CardSpin/resolve/main/minimax_h3_orb360_step1500.safetensors) | 0.6 GB | `loras/h3-tier2` |
+| Character swap (Apps) | `h3_character_swap_v1.5.safetensors` | [akatz-ai/MiniMax-H3-Character-Swap-LoRA](https://huggingface.co/akatz-ai/MiniMax-H3-Character-Swap-LoRA/resolve/main/h3_character_swap_v1.5.safetensors) | 0.16 GB | `loras` |
 | Krea style reference | `krea2_style_reference.safetensors` | [Comfy-Org/Krea-2](https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_style_reference.safetensors) | 0.46 GB | `loras` |
 | Krea identity edit | `krea2_identity_edit_v1_2.safetensors` | [conradlocke/krea2-identity-edit](https://huggingface.co/conradlocke/krea2-identity-edit/resolve/main/krea2_identity_edit_v1_2.safetensors) | 1.8 GB | `loras` |
 | Instruction edit | `qwen-image-edit-2511-Q4_K_M.gguf` | [unsloth/Qwen-Image-Edit-2511-GGUF](https://huggingface.co/unsloth/Qwen-Image-Edit-2511-GGUF/resolve/main/qwen-image-edit-2511-Q4_K_M.gguf) | 13.3 GB | `unet` |

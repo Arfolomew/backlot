@@ -68,6 +68,8 @@ ORB360_SIZES = {"land": (1152, 768), "port": (832, 1024), "square": (800, 800)}
 OUTPUT_ROOT = os.path.expanduser(os.environ.get("BACKLOT_OUTPUT_DIR", os.path.join(HERE, "..", "output")))
 VIDEO_DIR = os.path.join(OUTPUT_ROOT, "videos")
 IMAGE_DIR = os.path.join(OUTPUT_ROOT, "images")
+META_DIR = os.path.join(OUTPUT_ROOT, "meta")      # one small JSON per output: what made it (Oct 20 2026)
+os.makedirs(META_DIR, exist_ok=True)
 TMP_DIR = os.path.join(OUTPUT_ROOT, ".tmp")
 for _d in (VIDEO_DIR, IMAGE_DIR, TMP_DIR):
     os.makedirs(_d, exist_ok=True)
@@ -77,6 +79,84 @@ for _d in (VIDEO_DIR, IMAGE_DIR, TMP_DIR):
 #                  dequantizes ON-GPU -> OOM in dequantize_blocks_Q4_K if on CUDA.
 #   head_chunks 16 MiniMaxLowVRAMAttention; higher = less VRAM, slower (max 56).
 #   steps 8        with the 4-step turbo LoRA at strength 1.0.
+# Moves: one-click camera moves and effects (Oct 20 2026). Catalog in moves.json,
+# previews rendered by tools/render_move_previews.py into previews/moves/<id>.mp4.
+with open(os.path.join(HERE, "moves.json")) as _f:
+    MOVES = {m["id"]: m for m in json.load(_f)["moves"]}
+PREVIEW_DIR = os.path.join(HERE, "previews")
+# Character Swap (akatz-ai H3 Character Swap LoRA V1.5, Oct 17 2026 A/B winner over Viggle):
+# Ref2VA graph + swap LoRA 1.0 + the ref2v turbo, 8 steps, er_sde / normal. Source clip = <Video 1>
+# (its soundtrack rides along), character = <Picture 1>. ~22 min per 5 s clip on a 16 GB card, most
+# of it the 32B text encoder reading the source video.
+SWAP_LORA = "h3_character_swap_v1.5.safetensors"
+SWAP_MAX_SECONDS = 10.0
+
+# Cinema Studio (Oct 20 2026): pickers -> one H3 prompt in the model's own three-field,
+# multi-shot format. Catalog of fragments in cinema.json.
+with open(os.path.join(HERE, "cinema.json")) as _f:
+    CINEMA = json.load(_f)
+
+def _pick(group, key):
+    items = CINEMA[group]
+    for it in items:
+        if it["key"] == key:
+            return it
+    return items[0]
+
+def _mmss(t):
+    return "%02d:%06.3f" % (int(t // 60), t % 60)
+
+def compose_cinema_prompt(o):
+    """o: {scene, shots?, genre, era, light, camera, lens, aperture, pacing, seconds}.
+    Returns (prompt, cuts). 'shots' = optional list of per-shot lines (custom mode);
+    otherwise every shot restates the same scene from the ladder's framing."""
+    scene = " ".join(str(o.get("scene") or "").split()).rstrip(".")
+    seconds = max(2.0, min(10.0, float(o.get("seconds") or 5)))
+    genre = _pick("genre", o.get("genre") or "general")
+    era = _pick("era", o.get("era") or "auto")
+    light = _pick("light", o.get("light") or "auto")
+    cam = _pick("camera", o.get("camera") or "modern")
+    lens = _pick("lens", o.get("lens") or "clean")
+    ap = _pick("aperture", o.get("aperture") or "f4")
+    pacing = _pick("pacing", o.get("pacing") or "single")
+    custom = [" ".join(x.split()).rstrip(".") for x in (o.get("shots") or []) if str(x).strip()]
+    # cut list in seconds, dropping cuts that would leave a shot shorter than 0.6 s
+    cuts = [round(f * seconds, 3) for f in pacing["cuts"]]
+    keep = [cuts[0]]
+    for c in cuts[1:]:
+        if c - keep[-1] >= 0.6 and seconds - c >= 0.6:
+            keep.append(c)
+    cuts = keep
+    ladder = pacing["ladder"]
+    style = ", ".join(x for x in [
+        "Live-action, cinematic", era["frag"], cam["frag"], lens["frag"], ap["frag"], light["frag"], genre["look"]] if x)
+    parts = []
+    for i, t in enumerate(cuts):
+        shot = CINEMA["shots"][ladder[i % len(ladder)]]
+        content = custom[i] if i < len(custom) else (scene if i == 0 else f"the same scene, {scene}")
+        if i == 0:
+            parts.append(f"[Shot 1] {style}, {shot['frame']} frames {content}. {shot['motion']}")
+        else:
+            parts.append(f"[Shot {i + 1}] At {_mmss(t)}, the camera cuts to {shot['frame']} of {content}. {shot['motion']}")
+    prompt = ("integrated_multimodal_description: " + " ".join(parts) + "\n\n"
+              f"overall_soundscape: {genre['sound']}, continuous across every cut.\n\n"
+              f"non_diegetic_music: {genre['music']}")
+    return prompt, cuts
+
+
+def compose_move_prompt(move, subject):
+    """Turn a Move + the user's subject line into the prompt H3 gets.
+    Camera moves ride the Camera Motion LoRA, which was trained on comma lists
+    ('camera motion, subject, scene, move, look, quality'), so that is what we send.
+    Effects carry no LoRA and use the model's own three-field format."""
+    subject = " ".join(subject.split()).rstrip(".,;")
+    if move.get("lora"):
+        return (f"{CAMERA_TRIGGER}, {subject}, {move['move']}, "
+                "cinematic lighting, sharp detail, 4k, high quality")
+    return (f"integrated_multimodal_description: [Shot 1] {subject}. {move['move']}.\n\n"
+            "overall_soundscape: natural ambience matching the scene, subtle and continuous.\n\n"
+            "non_diegetic_music: none")
+
 H3_STEPS = 8
 H3_HEAD_CHUNKS = 16
 H3_FPS = 24
@@ -299,6 +379,8 @@ class H(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json"):
         if isinstance(body, str):
             body = body.encode()
+        if code == 200 and ctype.startswith("application/json") and getattr(self, "_body", None) is not None:
+            self._record_meta(body)
         jid = getattr(self, "_job", None)
         if jid:
             with JOBS_LOCK:
@@ -311,6 +393,27 @@ class H(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _record_meta(self, body):
+        """Tag every finished output with what made it, so the gallery can show and reuse it."""
+        try:
+            d = json.loads(body)
+            url = d.get("url") or ""
+            if not (url.startswith("/outputs/") or url.startswith("/images/")):
+                return
+            req = self._body or {}
+            mode = req.get("mode") or ""
+            label = str(req.get("label") or "").strip()
+            if not label:
+                label = {"t2v": "Video", "i2v": "Image to Video", "ref": "Reference", "orbit": "360 Orbit",
+                         "swap": "Character Swap", "edit": "Edit", "angles": "Angles"}.get(mode, mode or "render")
+            meta = {"label": label[:80], "mode": mode, "move": req.get("move"), "seed": d.get("seed"),
+                    "prompt": str(req.get("prompt") or req.get("subject") or req.get("scene") or "")[:400],
+                    "took": d.get("took"), "made": time.strftime("%Y-%m-%d %H:%M")}
+            with open(os.path.join(META_DIR, os.path.basename(url) + ".json"), "w") as f:
+                json.dump(meta, f)
+        except Exception:
+            pass
 
     def _authed(self):
         if not PASSWORD:
@@ -358,6 +461,26 @@ class H(BaseHTTPRequestHandler):
         if p.path in ("/", "/index.html"):
             with open(os.path.join(HERE, "index.html"), "rb") as f:
                 return self._send(200, f.read(), "text/html; charset=utf-8")
+        if p.path == "/api/cinema":
+            return self._send(200, json.dumps({k: v for k, v in CINEMA.items() if not k.startswith("_")}))
+        if p.path == "/api/moves":
+            out = []
+            for m in MOVES.values():
+                pv = os.path.join(PREVIEW_DIR, "moves", m["id"] + ".mp4")
+                d = {k: v for k, v in m.items() if k != "preview_subject"}
+                d["preview"] = f"/previews/moves/{m['id']}.mp4" if os.path.isfile(pv) else None
+                d["poster"] = (f"/previews/moves/{m['id']}.jpg"
+                               if os.path.isfile(pv[:-4] + ".jpg") else None)
+                out.append(d)
+            return self._send(200, json.dumps({"moves": out}))
+        if p.path.startswith("/previews/"):
+            rel = os.path.normpath(urllib.parse.unquote(p.path[len("/previews/"):]))
+            fp = os.path.join(PREVIEW_DIR, rel)
+            if rel.startswith("..") or not os.path.isfile(fp):
+                return self._send(404, json.dumps({"error": "not found"}))
+            mime = "video/mp4" if fp.endswith(".mp4") else "image/jpeg"
+            with open(fp, "rb") as f:
+                return self._send(200, f.read(), mime)
         if p.path == "/api/heartbeat":
             HEARTBEAT["last"] = time.time()
             HEARTBEAT["seen"] = True
@@ -401,7 +524,16 @@ class H(BaseHTTPRequestHandler):
                                 if f.lower().endswith(want)], reverse=True)[:60]
             except OSError:
                 files = []
-            return self._send(200, json.dumps({"files": files}))
+            tags = {}
+            for f in files:
+                mp = os.path.join(META_DIR, f + ".json")
+                if os.path.isfile(mp):
+                    try:
+                        with open(mp) as fh:
+                            tags[f] = json.load(fh)
+                    except (OSError, ValueError):
+                        pass
+            return self._send(200, json.dumps({"files": files, "tags": tags}))
         if p.path.startswith("/images/"):
             name = os.path.basename(urllib.parse.unquote(p.path[len("/images/"):]))
             fp = os.path.join(IMAGE_DIR, name)
@@ -459,6 +591,15 @@ class H(BaseHTTPRequestHandler):
         return self._dispatch(p, body)
 
     def _dispatch(self, p, body):
+        self._body = body if isinstance(body, dict) else {}
+        if p.path == "/api/cinema/compose":
+            try:
+                if not str(body.get("scene") or "").strip() and not any(str(x).strip() for x in (body.get("shots") or [])):
+                    return self._send(400, json.dumps({"error": "describe the scene first"}))
+                prompt, cuts = compose_cinema_prompt(body)
+                return self._send(200, json.dumps({"prompt": prompt, "cuts": cuts, "shots": len(cuts)}))
+            except Exception as e:
+                return self._send(400, json.dumps({"error": str(e)}))
         if p.path == "/api/video":
             try:
                 if not comfy_up():
@@ -466,7 +607,24 @@ class H(BaseHTTPRequestHandler):
                         {"error": BACKEND_DOWN}))
                 prompt = (body.get("prompt") or "").strip()
                 mode = (body.get("mode") or "t2v").lower()
-                if not prompt and mode != "orbit":   # orbit writes its own prompt
+                # ---- Moves (Oct 20 2026): a preset composes the prompt + LoRA settings ----
+                move_id = (body.get("move") or "").strip()
+                move = None
+                if move_id:
+                    move = MOVES.get(move_id)
+                    if not move:
+                        return self._send(400, json.dumps({"error": f"unknown move: {move_id}"}))
+                    if mode not in ("t2v", "i2v"):
+                        return self._send(400, json.dumps({"error": "Moves work in Text and Image modes"}))
+                    subject = (body.get("subject") or prompt).strip()
+                    if not subject:
+                        return self._send(400, json.dumps({"error": "describe the subject first"}))
+                    prompt = compose_move_prompt(move, subject)
+                    body = dict(body)
+                    body["camera_motion"] = bool(move.get("lora"))
+                    body["camera_strength"] = float(move.get("strength") or 1.0)
+                    body.setdefault("seconds", move.get("seconds", 5))
+                if not prompt and mode not in ("orbit", "swap"):   # orbit and swap write their own prompt
                     return self._send(400, json.dumps({"error": "prompt required"}))
                 width = int(body.get("width", 1344))
                 height = int(body.get("height", 768))
@@ -519,6 +677,62 @@ class H(BaseHTTPRequestHandler):
                         "frames": frames, "seconds": round(frames / H3_FPS, 2),
                         "took": round(time.time() - t0, 1), "mode": mode, "refs": len(names),
                         "width": width, "height": height}))
+
+                # ---- Character Swap (Apps tab, Oct 20 2026) ----
+                if mode == "swap":
+                    vid = body.get("video") or ""
+                    img = body.get("image") or ""
+                    if not vid or not img:
+                        return self._send(400, json.dumps(
+                            {"error": "Character Swap needs a source video and a character image"}))
+                    vraw = base64.b64decode(str(vid).split(",")[-1])
+                    iraw = base64.b64decode(str(img).split(",")[-1])
+                    stamp = int(time.time())
+                    vname = upload_to_comfy(vraw, f"backlot_swap_src_{stamp}.mp4")
+                    iname = upload_to_comfy(iraw, f"backlot_swap_char_{stamp}.png")
+                    # length follows the source clip (capped); probe it from a local copy
+                    tmp = stage_local(vraw, f"swap_probe_{stamp}.mp4")
+                    try:
+                        out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                              "-of", "csv=p=0", tmp], capture_output=True, text=True).stdout.strip()
+                        src_seconds = float(out) if out else seconds
+                    except Exception:
+                        src_seconds = seconds
+                    finally:
+                        cleanup_local(tmp)
+                    seconds = max(2.0, min(SWAP_MAX_SECONDS, src_seconds))
+                    who = (body.get("subject") or "the person").strip()
+                    prompt = (f"subject_definitions:\n<Subject 1> is the character in <Picture 1>: keep this face, "
+                              f"hair, skin and clothing exactly.\n<Subject 2> is the performance in <Video 1>: every movement, "
+                              f"gesture, camera move, timing and the spoken audio.\n\nsummary:\nReplace {who} in <Video 1> with "
+                              f"<Subject 1>, keeping <Subject 2> unchanged.\n\nretention_analysis:\n<Subject 2> is fully preserved: "
+                              f"framing, camera motion, body movement, lip movement and the soundtrack carry over unaltered. "
+                              f"<Subject 1> replaces the face, hair and clothing of {who} and nothing else changes.\n\n"
+                              f"detailed_description:\n[Shot 1] The same shot as <Video 1> from first frame to last, with "
+                              f"<Subject 1> in place of {who}, matching every pose and expression in sync with the original.\n\n"
+                              f"overall_soundscape:\nIdentical to <Video 1>.\n\nnon_diegetic_music:\nN/A")
+                    wf, frames = build_ref2va(
+                        prompt, ref_images=[iname], width=width, height=height,
+                        seconds=seconds, steps=H3_STEPS, seed=seed, scheduler="normal",
+                        low_vram_chunks=H3_HEAD_CHUNKS, fps=H3_FPS, clip_cpu=True,
+                        prefix="video/BacklotSwap", extra_loras=((SWAP_LORA, 1.0),))
+                    wf["9"]["inputs"]["sampler_name"] = "er_sde"
+                    wf["60"] = {"class_type": "LoadVideo", "inputs": {"file": vname}}
+                    wf["61"] = {"class_type": "GetVideoComponents", "inputs": {"video": ["60", 0]}}
+                    wf["8"]["inputs"]["ref_videos.ref_video_0"] = ["61", 0]
+                    wf["8"]["inputs"]["ref_video_audios.ref_video_audio_0"] = ["61", 1]
+                    t0 = time.time()
+                    blob, ext, staged = submit_and_wait(wf, timeout=3600)
+                    name, path = save_output(blob, kind="swap", ext=ext, staged=staged)
+                    for nm in (vname, iname):
+                        try:
+                            discard_upload(nm)
+                        except OSError:
+                            pass
+                    return self._send(200, json.dumps({
+                        "url": f"/outputs/{name}", "file": path, "seed": seed, "frames": frames,
+                        "seconds": round(frames / H3_FPS, 2), "took": round(time.time() - t0, 1),
+                        "mode": mode, "width": width, "height": height}))
 
                 # ---- Ref2VA: its own DiT, own turbo LoRA, own builder ----
                 if mode == "ref":

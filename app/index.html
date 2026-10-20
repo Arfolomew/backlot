@@ -82,6 +82,34 @@
   #vidfile{ display:none; }
   #viewer img{ background:repeating-conic-gradient(#3a3a3a 0% 25%, #2a2a2a 0% 50%) 50% / 24px 24px; }
   .chk{ display:flex; align-items:center; gap:8px; margin-top:10px; font-size:12px; color:var(--muted); }
+  /* Apps (Oct 20 2026) */
+  .appgrid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+  .appcard{ border:1px solid var(--line); border-radius:10px; padding:10px 11px; cursor:pointer; background:var(--panel2); }
+  .appcard:hover{ border-color:var(--accent); }
+  .appcard.active{ border-color:var(--accent); box-shadow:0 0 0 2px rgba(255,157,92,.25); }
+  .appcard .aname{ font-size:12px; font-weight:700; }
+  .appcard .ablurb{ font-size:10.5px; color:var(--muted); margin-top:3px; line-height:1.35; }
+  .appcard .atime{ font-size:10px; color:var(--accent); margin-top:5px; }
+  .appform{ margin-top:12px; }
+  .appform .ratios{ grid-template-columns:repeat(4,1fr); }
+  /* Cinema Studio (Oct 20 2026) */
+  .pickrow{ display:flex; flex-wrap:wrap; gap:5px; margin-top:4px; }
+  .pickrow .ratio{ padding:6px 10px; font-size:11px; }
+  .cuts{ font-size:11px; color:var(--muted); margin-top:6px; font-variant-numeric:tabular-nums; }
+  #cprompt{ min-height:150px; font-size:11px; line-height:1.4; }
+  /* Moves tab (Oct 20 2026) */
+  .movegrid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+  .move{ border:1px solid var(--line); border-radius:10px; overflow:hidden; cursor:pointer; background:var(--panel2); }
+  .move:hover{ border-color:var(--accent); }
+  .move.active{ border-color:var(--accent); box-shadow:0 0 0 2px rgba(255,157,92,.25); }
+  .move .thumb{ width:100%; aspect-ratio:16/9; object-fit:cover; display:block; background:#000; }
+  .move .nothumb{ width:100%; aspect-ratio:16/9; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:11px; background:#000; }
+  .move .mname{ font-size:12px; font-weight:700; padding:7px 8px 2px; }
+  .move .mgroup{ font-size:10px; color:var(--muted); padding:0 8px 7px; text-transform:uppercase; letter-spacing:.06em; }
+  .movefilter{ display:flex; flex-wrap:wrap; gap:5px; margin-top:6px; }
+  .movefilter .ratio{ padding:5px 9px; font-size:11px; }
+  .moveinfo{ margin-top:10px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--panel2); font-size:12px; line-height:1.45; }
+  .moveinfo b{ color:var(--text); }
 
   /* Reference picker — the number on each thumb IS its <Picture N> */
   .reflist{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
@@ -111,6 +139,9 @@
     <div class="tabs" id="tabs">
       <div class="tab active" data-tab="video">VIDEO</div>
       <div class="tab" data-tab="image">IMAGE</div>
+      <div class="tab" data-tab="moves">MOVES</div>
+      <div class="tab" data-tab="cinema">CINEMA</div>
+      <div class="tab" data-tab="apps">APPS</div>
     </div>
     <div class="status"><span class="dot" id="dot"></span><span id="statustxt">checking backend…</span></div>
   </header>
@@ -232,6 +263,102 @@
           (fast mode: about 1 min, doubles the size but looks smoother/plastic).</div>
       </div>
      </div><!-- /video-panel -->
+
+     <div id="apps-panel" style="display:none; flex-direction:column; flex:1; min-height:0">
+      <label class="first">Apps</label>
+      <div class="hint">One input, one job, one result. Each app is a saved recipe on the models already installed.</div>
+      <div class="appgrid" id="appgrid"></div>
+      <div class="appform" id="appform" style="display:none"></div>
+      <button class="gen" id="agen" style="display:none">Run</button>
+      <div class="err" id="aerr"></div>
+     </div><!-- /apps-panel -->
+
+     <div id="cinema-panel" style="display:none; flex-direction:column; flex:1; min-height:0">
+      <label class="first">Cinema Studio</label>
+      <div class="hint">Direct the look with pickers, describe the scene once, pick a pacing. Backlot writes the multi-shot prompt in H3's own format (shots, cut times, camera moves) and renders it as ONE clip, so the subject stays consistent across cuts.</div>
+
+      <label>Scene</label>
+      <textarea id="cscene" placeholder="Who, what, where. Example: a lighthouse keeper in a wool coat climbs the spiral stairs with a lantern, wind outside, the lamp room glowing above"></textarea>
+
+      <label>Genre</label><div class="pickrow" id="cgenre"></div>
+      <label>Era</label><div class="pickrow" id="cera"></div>
+      <label>Light</label><div class="pickrow" id="clight"></div>
+      <label>Camera</label><div class="pickrow" id="ccamera"></div>
+      <label>Lens</label><div class="pickrow" id="clens"></div>
+      <label>Aperture</label><div class="pickrow" id="caperture"></div>
+      <label>Pacing</label><div class="pickrow" id="cpacing"></div>
+      <div class="cuts" id="ccuts"></div>
+
+      <details>
+        <summary>Custom shots (optional)</summary>
+        <textarea id="cshots" placeholder="One line per shot, in order. Leave empty and every cut reframes the scene above."></textarea>
+        <div class="hint">Shots beyond the pacing's cut count are ignored; missing ones fall back to the scene.</div>
+      </details>
+
+      <label>Start from a photo <span class="hint" style="display:inline">(optional)</span></label>
+      <input type="file" id="cimgfile" accept="image/*">
+      <div class="hint" id="cimghint">With a photo the first shot starts on it (Image to Video).</div>
+
+      <label>Aspect ratio</label>
+      <div class="ratios" id="cratio">
+        <div class="ratio active" data-w="1344" data-h="768">16:9</div>
+        <div class="ratio" data-w="768" data-h="1344">9:16</div>
+        <div class="ratio" data-w="1024" data-h="1024">1:1</div>
+      </div>
+
+      <label>Duration <span class="val" id="csecv" style="float:right">8s</span></label>
+      <div class="slider-row"><input type="range" id="cseconds" min="3" max="10" step="0.5" value="8"></div>
+
+      <label>Prompt <span class="browse" id="ccompose" style="float:right; margin:0">compose from the pickers</span></label>
+      <textarea id="cprompt" placeholder="Press 'compose from the pickers' to write the prompt. You can edit it before rendering."></textarea>
+
+      <details>
+        <summary>Advanced</summary>
+        <label>Seed (&minus;1 = random)</label>
+        <input type="number" id="cseed" value="-1">
+      </details>
+
+      <button class="gen" id="cgen">Render Scene</button>
+      <div class="err" id="cerr"></div>
+     </div><!-- /cinema-panel -->
+
+     <div id="moves-panel" style="display:none; flex-direction:column; flex:1; min-height:0">
+      <label class="first">Pick a Move</label>
+      <div class="hint">One click per camera move or effect. Camera moves ride the Camera Motion LoRA; effects are plain prompts. Click a card to play its preview on the right.</div>
+      <div class="movefilter" id="movefilter"></div>
+      <div class="movegrid" id="movegrid"><div class="hint">loading moves&hellip;</div></div>
+      <div class="moveinfo" id="moveinfo" style="display:none"></div>
+
+      <label>Subject</label>
+      <textarea id="msubject" placeholder="Who or what is in the shot, and where. One or two sentences. Example: a red vintage pickup parked on a desert road at golden hour, dust in the air"></textarea>
+      <div class="hint">The move itself is added for you. Describe the scene, not the camera.</div>
+
+      <label>Start from a photo <span class="hint" style="display:inline">(optional)</span></label>
+      <input type="file" id="mimgfile" accept="image/*">
+      <div class="hint" id="mimghint">Leave empty for text to video. With a photo the clip starts on it (Image to Video), center-cropped to the shape below.</div>
+
+      <label>Aspect ratio</label>
+      <div class="ratios" id="mratio">
+        <div class="ratio active" data-w="1344" data-h="768">16:9</div>
+        <div class="ratio" data-w="768" data-h="1344">9:16</div>
+        <div class="ratio" data-w="1024" data-h="1024">1:1</div>
+      </div>
+
+      <label>Duration <span class="val" id="msecv" style="float:right">5s</span></label>
+      <div class="slider-row">
+        <input type="range" id="mseconds" min="2" max="10" step="0.5" value="5">
+      </div>
+      <div class="hint">Each move has its own default. About 7 min for 5 s at 1344&times;768 on a 16 GB card.</div>
+
+      <details>
+        <summary>Advanced</summary>
+        <label>Seed (&minus;1 = random)</label>
+        <input type="number" id="mseed" value="-1">
+      </details>
+
+      <button class="gen" id="mgen">Generate with this Move</button>
+      <div class="err" id="merr"></div>
+     </div><!-- /moves-panel -->
 
      <div id="image-panel" style="display:none; flex-direction:column; flex:1; min-height:0">
 
@@ -423,7 +550,7 @@
 <script>
 const $ = s => document.querySelector(s);
 let VW = 1344, VH = 768, VMODE = 't2v', VIMG = null, VREFS = [], LAST = null, BUSY = false;
-let TAB = 'video', IW = 1728, IH = 1152, ILAST = null;
+let TAB = 'video', IW = 1728, IH = 1152, ILAST = null, GTAGS = {};
 let FREEMSG = null;   // declared up here: status() runs at load and reads it (TDZ)
 
 // Renders run as server-side jobs: jfetch() posts with X-Backlot-Async, gets a job id back
@@ -455,7 +582,7 @@ addEventListener('load', async () => {
   let saved = null;
   try{ saved = JSON.parse(localStorage.getItem('backlot.job') || 'null'); }catch(e){}
   if(!saved) return;
-  const isVideo = ['/api/video', '/api/upscale', '/api/slowmo'].includes(saved.url);
+  const isVideo = ['/api/video', '/api/upscale', '/api/slowmo'].includes(saved.url);   // Moves also post to /api/video
   const tab = document.querySelector('.tab[data-tab="' + (isVideo ? 'video' : 'image') + '"]');
   if(tab && !tab.classList.contains('active')) tab.click();
   setBusy(true, 'picking up the render that was running before the reload…');
@@ -777,7 +904,7 @@ function cropNote(){
 
 function setBusy(on, msg){
   BUSY = on;
-  $('#gen').disabled = on; $('#upscale').disabled = on; $('#igen').disabled = on; $('#ivert').disabled = on || !ILAST; $('#iup').disabled = on || !ILAST; $('#iupload').disabled = on;
+  $('#gen').disabled = on; $('#mgen').disabled = on; $('#cgen').disabled = on; $('#agen').disabled = on; $('#upscale').disabled = on; $('#igen').disabled = on; $('#ivert').disabled = on || !ILAST; $('#iup').disabled = on || !ILAST; $('#iupload').disabled = on;
   if(on){
     $('#viewer').innerHTML = '<div class="placeholder"><div class="spinner"></div>' + (msg||'working…') + '</div>';
   }
@@ -887,20 +1014,225 @@ function loadGallery(){
   const img = TAB === 'image';
   fetch('/api/gallery?kind=' + (img ? 'image' : 'video')).then(r=>r.json()).then(d=>{
     const base = img ? '/images/' : '/outputs/';
-    $('#gallery').innerHTML = (d.files||[]).map(f => img
-      ? '<img src="'+base+encodeURIComponent(f)+'" loading="lazy" title="'+f+'" alt="">'
-      : '<video src="'+base+encodeURIComponent(f)+'" muted preload="metadata" title="'+f+'"></video>'
+    GTAGS = d.tags || {};
+    $('#gallery').innerHTML = (d.files||[]).map(f => { const t = GTAGS[f]; const tt = (t ? t.label + ' · ' : '') + f; return img
+      ? '<img src="'+base+encodeURIComponent(f)+'" loading="lazy" title="'+tt+'" alt="">'
+      : '<video src="'+base+encodeURIComponent(f)+'" muted preload="metadata" title="'+tt+'"></video>'; }
     ).join('');
     document.querySelectorAll('#gallery video, #gallery img').forEach(v=>{
       v.addEventListener('click', ()=>{
         const name = decodeURIComponent(v.src.split('/').pop());
-        if(img){ ILAST = name; showImage(v.src, name); paintCrop(); }
-        else   { LAST  = name; showVideo(v.src, name); }
+        const t = GTAGS[name];
+        const meta = t ? t.label + (t.seed != null ? ' · seed ' + t.seed : '') + (t.prompt ? ' · <span class="browse" id="reuse">reuse prompt</span>' : '') : name;
+        if(img){ ILAST = name; showImage(v.src, meta); paintCrop(); }
+        else   { LAST  = name; showVideo(v.src, meta); }
+        const r = document.getElementById('reuse');
+        if(r && t) r.addEventListener('click', ()=>{
+          const box = img ? $('#iprompt') : (TAB === 'moves' ? $('#msubject') : TAB === 'cinema' ? $('#cscene') : $('#prompt'));
+          box.value = t.prompt; box.focus();
+        });
       });
     });
   }).catch(()=>{});
 }
 loadGallery();
+
+// ---------------- Apps (Oct 20 2026) ----------------
+// Each app = a saved recipe over an endpoint that already exists. Inputs are declared, the form is built from them.
+const APPS = [
+  {id:'angles', name:'Angles', time:'~25 s', blurb:'Re-shoot a photo from a new camera position: 8 directions, 4 heights, 3 distances (Qwen Multiple Angles LoRA).',
+   inputs:[{k:'image',t:'image',label:'Photo'},{k:'azimuth',t:'pick',label:'Direction',opts:['front view','front-right quarter view','right side view','back-right quarter view','back view','back-left quarter view','left side view','front-left quarter view'],def:'front-right quarter view'},
+           {k:'elevation',t:'pick',label:'Height',opts:['low-angle shot','eye-level shot','elevated shot','high-angle shot'],def:'eye-level shot'},{k:'distance',t:'pick',label:'Distance',opts:['close-up','medium shot','wide shot'],def:'medium shot'}],
+   run:v=>({url:'/api/image', body:{mode:'angles', image:v.image, azimuth:v.azimuth, elevation:v.elevation, distance:v.distance, width:1728, height:1152}, kind:'image'})},
+  {id:'relight', name:'Relight', time:'~25 s', blurb:'Change the light on any photo: golden hour, window, neon, overcast, studio (Qwen Image Edit).',
+   inputs:[{k:'image',t:'image',label:'Photo'},{k:'light',t:'pick',label:'Light',opts:['golden hour','soft window light','neon night','overcast daylight','studio softbox','candlelight'],def:'golden hour'}],
+   run:v=>({url:'/api/image', body:{mode:'edit', image:v.image, prompt:'Relight this photo with ' + v.light + ', keep the subject, framing and every detail exactly the same, only the lighting changes.', width:1728, height:1152}, kind:'image'})},
+  {id:'cutout', name:'Cutout', time:'~25 s', blurb:'Lift the subject onto a transparent background as a real RGBA PNG (Qwen Image 2.1).',
+   inputs:[{k:'image',t:'image',label:'Photo'}],
+   run:v=>({url:'/api/image', body:{model:'qwen21', mode:'edit', image:v.image, transparent:true, prompt:'Keep the main subject exactly as it is and remove the entire background, transparent background.', width:1728, height:1152}, kind:'image'})},
+  {id:'upscale4k', name:'4K Upscale', time:'~20 s', blurb:'SeedVR2 to a 2160 short edge. Real pores and lettering, not plastic smoothing.',
+   inputs:[{k:'image',t:'image',label:'Photo'}],
+   run:v=>({url:'/api/image-upscale', body:{image:v.image, size:'4k'}, kind:'image'})},
+  {id:'orbit', name:'360 Orbit', time:'~12 min', blurb:'One photo becomes a full turntable clip that loops (ORB360 LoRA). Three photos (front, 120°, 240°) give a clean back side.',
+   inputs:[{k:'images',t:'images',label:'1 or 3 photos'}],
+   run:v=>({url:'/api/video', body:{mode:'orbit', images:v.images, width:1152, height:768, prompt:''}, kind:'video'})},
+  {id:'charswap', name:'Character Swap', time:'~20 min / 5 s', blurb:'Put a new face, hair and outfit on the person in a clip. Motion, lip sync and sound stay (akatz Character Swap V1.5).',
+   inputs:[{k:'video',t:'video',label:'Source clip (up to 10 s)'},{k:'image',t:'image',label:'Character photo'},{k:'subject',t:'text',label:'Who to replace',def:'the person'}],
+   run:v=>({url:'/api/video', body:{mode:'swap', video:v.video, image:v.image, subject:v.subject, width:1344, height:768}, kind:'video'})},
+];
+let APP = null, AVALS = {};
+function paintApps(){
+  $('#appgrid').innerHTML = APPS.map(a => '<div class="appcard' + (APP && APP.id === a.id ? ' active' : '') + '" data-id="' + a.id + '"><div class="aname">' + a.name + '</div><div class="ablurb">' + a.blurb + '</div><div class="atime">' + a.time + '</div></div>').join('');
+}
+function readFileAsData(file){ return new Promise((res, rej)=>{ const rd = new FileReader(); rd.onload = ()=>res(rd.result); rd.onerror = rej; rd.readAsDataURL(file); }); }
+$('#appgrid').addEventListener('click', e=>{
+  const c = e.target.closest('.appcard'); if(!c) return;
+  APP = APPS.find(a => a.id === c.dataset.id); AVALS = {};
+  document.querySelectorAll('#appgrid .appcard').forEach(x=>x.classList.toggle('active', x.dataset.id === APP.id));
+  const f = $('#appform'); f.style.display = ''; $('#agen').style.display = ''; $('#agen').textContent = 'Run ' + APP.name; $('#aerr').textContent = '';
+  f.innerHTML = APP.inputs.map(i => {
+    if(i.t === 'image' || i.t === 'video') return '<label>' + i.label + '</label><input type="file" data-k="' + i.k + '" accept="' + (i.t === 'image' ? 'image/*' : 'video/mp4,video/*') + '">';
+    if(i.t === 'images') return '<label>' + i.label + '</label><input type="file" data-k="' + i.k + '" accept="image/*" multiple>';
+    if(i.t === 'text'){ AVALS[i.k] = i.def || ''; return '<label>' + i.label + '</label><input type="text" data-k="' + i.k + '" value="' + (i.def || '') + '">'; }
+    if(i.t === 'pick'){ AVALS[i.k] = i.def; return '<label>' + i.label + '</label><div class="ratios" data-k="' + i.k + '">' + i.opts.map(o => '<div class="ratio' + (o === i.def ? ' active' : '') + '" data-v="' + o + '">' + o.replace(' view','').replace(' shot','') + '</div>').join('') + '</div>'; }
+    return '';
+  }).join('');
+  $('#viewer').innerHTML = '<div class="placeholder">' + APP.name + ': add the input and press Run.</div>';
+});
+$('#appform').addEventListener('click', e=>{
+  const b = e.target.closest('.ratio'); if(!b) return;
+  const row = b.parentElement; AVALS[row.dataset.k] = b.dataset.v;
+  row.querySelectorAll('.ratio').forEach(x=>x.classList.toggle('active', x === b));
+});
+$('#appform').addEventListener('input', e=>{ if(e.target.type === 'text') AVALS[e.target.dataset.k] = e.target.value; });
+$('#appform').addEventListener('change', async e=>{
+  const inp = e.target; if(inp.type !== 'file') return;
+  if(inp.multiple){ AVALS[inp.dataset.k] = []; for(const f of inp.files) AVALS[inp.dataset.k].push(await readFileAsData(f)); }
+  else AVALS[inp.dataset.k] = inp.files[0] ? await readFileAsData(inp.files[0]) : null;
+});
+$('#agen').addEventListener('click', async ()=>{
+  if(!APP) return; $('#aerr').textContent = '';
+  for(const i of APP.inputs){ const v = AVALS[i.k]; if(v == null || (Array.isArray(v) && !v.length) || v === ''){ $('#aerr').textContent = 'Add: ' + i.label; return; } }
+  const req = APP.run(AVALS); req.body.label = 'App · ' + APP.name;
+  setBusy(true, 'running ' + APP.name + ' (' + APP.time + ')…');
+  try{
+    const r = await jfetch(req.url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(req.body)});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || 'the app failed');
+    const meta = APP.name + (d.took ? ' · ' + d.took + 's' : '');
+    if(req.kind === 'video'){ LAST = d.url.split('/').pop(); showVideo(d.url + '?t=' + Date.now(), meta); }
+    else{ ILAST = d.url.split('/').pop(); showImage(d.url + '?t=' + Date.now(), meta); }
+    loadGallery();
+  }catch(e){ $('#aerr').textContent = e.message; $('#viewer').innerHTML = '<div class="placeholder">That run did not finish.</div>'; }
+  setBusy(false);
+});
+
+// ---------------- Cinema Studio (Oct 20 2026) ----------------
+let CINEMA = null, CPICK = {genre:'general', era:'auto', light:'auto', camera:'modern', lens:'clean', aperture:'f4', pacing:'calm'}, CW = 1344, CH = 768, CIMG = null;
+async function loadCinema(){
+  try{ CINEMA = await (await fetch('/api/cinema')).json(); }catch(e){ $('#cerr').textContent = 'could not load Cinema Studio'; return; }
+  for(const g of ['genre','era','light','camera','lens','aperture','pacing']){
+    $('#c' + g).innerHTML = CINEMA[g].map(o => '<div class="ratio' + (o.key === CPICK[g] ? ' active' : '') + '" data-g="' + g + '" data-k="' + o.key + '">' + o.name + '</div>').join('');
+  }
+  paintCuts();
+}
+function paintCuts(){
+  const p = (CINEMA.pacing || []).find(x => x.key === CPICK.pacing); if(!p) return;
+  const secs = parseFloat($('#cseconds').value);
+  const cuts = p.cuts.map(f => f * secs).filter((t, i, a) => i === 0 || (t - a[i-1] >= 0.6 && secs - t >= 0.6));
+  $('#ccuts').textContent = cuts.length + (cuts.length === 1 ? ' shot, one take' : ' shots, cuts at ' + cuts.slice(1).map(t => t.toFixed(1) + 's').join(', '));
+}
+document.querySelectorAll('#cinema-panel .pickrow').forEach(row => row.addEventListener('click', e=>{
+  const b = e.target.closest('.ratio'); if(!b) return;
+  CPICK[b.dataset.g] = b.dataset.k;
+  row.querySelectorAll('.ratio').forEach(x=>x.classList.toggle('active', x.dataset.k === b.dataset.k));
+  if(b.dataset.g === 'pacing') paintCuts();
+}));
+$('#cseconds').addEventListener('input', ()=>{ $('#csecv').textContent = $('#cseconds').value + 's'; if(CINEMA) paintCuts(); });
+$('#cratio').addEventListener('click', e=>{
+  const b = e.target.closest('.ratio'); if(!b) return;
+  document.querySelectorAll('#cratio .ratio').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); CW = +b.dataset.w; CH = +b.dataset.h;
+});
+$('#cimgfile').addEventListener('change', e=>{
+  const f = e.target.files[0]; if(!f){ CIMG = null; return; }
+  const rd = new FileReader(); rd.onload = ()=>{ CIMG = rd.result; $('#cimghint').textContent = 'First shot starts on ' + f.name + '.'; }; rd.readAsDataURL(f);
+});
+async function composeCinema(){
+  $('#cerr').textContent = '';
+  const body = Object.assign({}, CPICK, {scene: $('#cscene').value, seconds: parseFloat($('#cseconds').value),
+    shots: $('#cshots').value.split('\n').map(x=>x.trim()).filter(Boolean)});
+  const r = await fetch('/api/cinema/compose', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  const d = await r.json();
+  if(!r.ok) throw new Error(d.error || 'could not compose');
+  $('#cprompt').value = d.prompt;
+  return d;
+}
+$('#ccompose').addEventListener('click', ()=>{ composeCinema().catch(e=>{ $('#cerr').textContent = e.message; }); });
+$('#cgen').addEventListener('click', async ()=>{
+  $('#cerr').textContent = '';
+  try{
+    if(!$('#cprompt').value.trim()) await composeCinema();
+    const prompt = $('#cprompt').value.trim();
+    setBusy(true, 'rendering the scene on MiniMax H3… one clip, every cut inside it');
+    const r = await jfetch('/api/video', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({mode: CIMG ? 'i2v' : 't2v', prompt, label: 'Cinema · ' + CPICK.pacing + ' · ' + CPICK.genre, scene: $('#cscene').value, width: CW, height: CH,
+        seconds: parseFloat($('#cseconds').value), seed: parseInt($('#cseed').value || '-1'), image: CIMG})});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || 'render failed');
+    LAST = d.url.split('/').pop();
+    showVideo(d.url + '?t=' + Date.now(), 'Cinema Studio · ' + d.seconds + 's · seed ' + d.seed + ' · ' + d.took + 's');
+    loadGallery();
+  }catch(e){ $('#cerr').textContent = e.message; $('#viewer').innerHTML = '<div class="placeholder">That run did not finish.</div>'; }
+  setBusy(false);
+});
+
+// ---------------- Moves (Oct 20 2026) ----------------
+let MOVES = [], MOVE = null, MW = 1344, MH = 768, MIMG = null, MGROUP = 'All';
+async function loadMoves(){
+  try{
+    const r = await fetch('/api/moves'); const d = await r.json();
+    MOVES = d.moves || [];
+  }catch(e){ $('#movegrid').innerHTML = '<div class="hint">could not load moves</div>'; return; }
+  const groups = ['All', ...Array.from(new Set(MOVES.map(m => m.group)))];
+  $('#movefilter').innerHTML = groups.map(g => '<div class="ratio' + (g === MGROUP ? ' active' : '') + '" data-g="' + g + '">' + g + '</div>').join('');
+  paintMoves();
+}
+function paintMoves(){
+  const list = MOVES.filter(m => MGROUP === 'All' || m.group === MGROUP);
+  $('#movegrid').innerHTML = list.map(m =>
+    '<div class="move' + (MOVE && MOVE.id === m.id ? ' active' : '') + '" data-id="' + m.id + '">'
+    + (m.poster ? '<img class="thumb" src="' + m.poster + '" alt="">' : '<div class="nothumb">preview soon</div>')
+    + '<div class="mname">' + m.name + '</div><div class="mgroup">' + m.group + '</div></div>').join('');
+}
+$('#movefilter').addEventListener('click', e=>{
+  const b = e.target.closest('.ratio'); if(!b) return;
+  MGROUP = b.dataset.g;
+  document.querySelectorAll('#movefilter .ratio').forEach(x=>x.classList.toggle('active', x.dataset.g === MGROUP));
+  paintMoves();
+});
+$('#movegrid').addEventListener('click', e=>{
+  const c = e.target.closest('.move'); if(!c) return;
+  MOVE = MOVES.find(m => m.id === c.dataset.id); if(!MOVE) return;
+  document.querySelectorAll('#movegrid .move').forEach(x=>x.classList.toggle('active', x.dataset.id === MOVE.id));
+  $('#mseconds').value = MOVE.seconds; $('#msecv').textContent = MOVE.seconds + 's';
+  $('#moveinfo').style.display = '';
+  $('#moveinfo').innerHTML = '<b>' + MOVE.name + '</b> &middot; ' + MOVE.group + (MOVE.lora ? ' &middot; Camera Motion LoRA ' + MOVE.strength.toFixed(2) : ' &middot; prompt effect')
+    + '<br>' + MOVE.blurb;
+  if(MOVE.preview){
+    $('#viewer').innerHTML = '<video src="' + MOVE.preview + '" controls autoplay loop muted></video><div class="meta">preview &middot; ' + MOVE.name + ' &middot; rendered on this app at 864&times;480</div>';
+  }else{
+    $('#viewer').innerHTML = '<div class="placeholder">' + MOVE.name + ': no preview rendered yet.</div>';
+  }
+});
+$('#mratio').addEventListener('click', e=>{
+  const b = e.target.closest('.ratio'); if(!b) return;
+  document.querySelectorAll('#mratio .ratio').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); MW = +b.dataset.w; MH = +b.dataset.h;
+});
+$('#mseconds').addEventListener('input', ()=>{ $('#msecv').textContent = $('#mseconds').value + 's'; });
+$('#mimgfile').addEventListener('change', e=>{
+  const f = e.target.files[0]; if(!f){ MIMG = null; return; }
+  const rd = new FileReader(); rd.onload = ()=>{ MIMG = rd.result; $('#mimghint').textContent = 'Starting on ' + f.name + ' (Image to Video).'; }; rd.readAsDataURL(f);
+});
+$('#mgen').addEventListener('click', async ()=>{
+  $('#merr').textContent = '';
+  if(!MOVE){ $('#merr').textContent = 'Pick a move first.'; return; }
+  const subject = $('#msubject').value.trim();
+  if(!subject){ $('#merr').textContent = 'Describe the subject first.'; return; }
+  setBusy(true, 'rendering ' + MOVE.name + ' on MiniMax H3…');
+  try{
+    const r = await jfetch('/api/video', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({mode: MIMG ? 'i2v' : 't2v', move: MOVE.id, subject, label: 'Move · ' + MOVE.name, width: MW, height: MH,
+        seconds: parseFloat($('#mseconds').value), seed: parseInt($('#mseed').value || '-1'), image: MIMG})});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || 'generation failed');
+    LAST = d.url.split('/').pop();
+    showVideo(d.url + '?t=' + Date.now(), MOVE.name + ' · ' + d.seconds + 's · seed ' + d.seed + ' · ' + d.took + 's');
+    loadGallery();
+  }catch(e){ $('#merr').textContent = e.message; $('#viewer').innerHTML = '<div class="placeholder">That run did not finish.</div>'; }
+  setBusy(false);
+});
 
 // ---------------- Video / Image tabs ----------------
 $('#tabs').addEventListener('click', e=>{
@@ -911,7 +1243,14 @@ $('#tabs').addEventListener('click', e=>{
   TAB = b.dataset.tab;
   $('#video-panel').style.display = TAB === 'video' ? 'flex' : 'none';
   $('#image-panel').style.display = TAB === 'image' ? 'flex' : 'none';
+  $('#moves-panel').style.display = TAB === 'moves' ? 'flex' : 'none';
+  $('#cinema-panel').style.display = TAB === 'cinema' ? 'flex' : 'none';
+  $('#apps-panel').style.display = TAB === 'apps' ? 'flex' : 'none';
+  if(TAB === 'apps' && !$('#appgrid').children.length) paintApps();
+  if(TAB === 'cinema' && !CINEMA) loadCinema();
+  if(TAB === 'moves' && !MOVES.length) loadMoves();
   $('#viewer').innerHTML = '<div class="placeholder">Nothing generated yet.</div>';
+  if(TAB === 'cinema') $('#viewer').innerHTML = '<video src="/previews/cinema/calm-lighthouse-1960s.mp4" controls autoplay loop muted></video><div class="meta">sample &middot; Calm pacing, Drama, 1960s, practicals, 35mm anamorphic f/1.4 &middot; one 8 s render, cuts at 2.3 s and 5.3 s</div>';
   loadGallery();
   freeVram();
 });

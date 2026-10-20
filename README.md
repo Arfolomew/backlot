@@ -36,6 +36,33 @@ of a plain ComfyUI. Point `BACKLOT_COMFY_URL` at Comfy Cloud and nothing else ch
 All models are open weights. No partner nodes, no closed APIs. Full list with download links in
 [docs/models.md](docs/models.md).
 
+## Moves, Cinema Studio, Apps
+
+Three tabs added Oct 20 2026 after taking Higgsfield's product apart (the teardown is in
+`research/higgsfield/`). Same models, no new downloads.
+
+**Moves.** 30 one-click camera moves and effects: push in, pull back, dolly zoom, orbit left and
+right, FPV drone, aerial reveal, crane, whip pan, macro, earth zoom out, disintegration and more.
+Pick a card, describe the subject in a sentence, optionally start from a photo, and Backlot writes
+the prompt the Camera Motion LoRA was trained on. Every card has a preview rendered on this app.
+
+**Cinema Studio.** Direct the look with pickers instead of prose: genre, era, light, camera body,
+lens, aperture and pacing. Backlot composes one prompt in H3's own multi-shot format, with cut
+times and camera moves per shot, so a calm three-shot scene or a chaotic ten-cut one renders as a
+single clip with the same subject across every cut. The prompt is shown before you render and you
+can edit it.
+
+**Apps.** One input, one job: Angles (re-shoot a photo from 96 camera positions), Relight, Cutout
+(real RGBA), 4K Upscale, 360 Orbit, and Character Swap (put a new face, hair and outfit on the
+person in a clip; motion, lip sync and sound stay).
+
+## What this costs elsewhere
+
+Higgsfield's own plan table (captured Oct 20 2026) prices a five-second 720p Seedance clip at about
+22 credits, so the $59/month Plus plan buys roughly 640 such clips a month, and 130 at 4K. Backlot
+renders a five-second clip in about five minutes on a 16 GB card for the cost of electricity, with
+no clip cap, no queue, and nothing leaving the machine.
+
 ## Requirements
 
 - Linux (tested on Ubuntu 24.04) or macOS, Python 3.10+.

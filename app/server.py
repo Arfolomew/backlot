@@ -68,6 +68,8 @@ ORB360_SIZES = {"land": (1152, 768), "port": (832, 1024), "square": (800, 800)}
 OUTPUT_ROOT = os.path.expanduser(os.environ.get("BACKLOT_OUTPUT_DIR", os.path.join(HERE, "..", "output")))
 VIDEO_DIR = os.path.join(OUTPUT_ROOT, "videos")
 IMAGE_DIR = os.path.join(OUTPUT_ROOT, "images")
+META_DIR = os.path.join(OUTPUT_ROOT, "meta")      # one small JSON per output: what made it (Oct 20 2026)
+os.makedirs(META_DIR, exist_ok=True)
 TMP_DIR = os.path.join(OUTPUT_ROOT, ".tmp")
 for _d in (VIDEO_DIR, IMAGE_DIR, TMP_DIR):
     os.makedirs(_d, exist_ok=True)
@@ -377,6 +379,8 @@ class H(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json"):
         if isinstance(body, str):
             body = body.encode()
+        if code == 200 and ctype.startswith("application/json") and getattr(self, "_body", None) is not None:
+            self._record_meta(body)
         jid = getattr(self, "_job", None)
         if jid:
             with JOBS_LOCK:
@@ -389,6 +393,27 @@ class H(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _record_meta(self, body):
+        """Tag every finished output with what made it, so the gallery can show and reuse it."""
+        try:
+            d = json.loads(body)
+            url = d.get("url") or ""
+            if not (url.startswith("/outputs/") or url.startswith("/images/")):
+                return
+            req = self._body or {}
+            mode = req.get("mode") or ""
+            label = str(req.get("label") or "").strip()
+            if not label:
+                label = {"t2v": "Video", "i2v": "Image to Video", "ref": "Reference", "orbit": "360 Orbit",
+                         "swap": "Character Swap", "edit": "Edit", "angles": "Angles"}.get(mode, mode or "render")
+            meta = {"label": label[:80], "mode": mode, "move": req.get("move"), "seed": d.get("seed"),
+                    "prompt": str(req.get("prompt") or req.get("subject") or req.get("scene") or "")[:400],
+                    "took": d.get("took"), "made": time.strftime("%Y-%m-%d %H:%M")}
+            with open(os.path.join(META_DIR, os.path.basename(url) + ".json"), "w") as f:
+                json.dump(meta, f)
+        except Exception:
+            pass
 
     def _authed(self):
         if not PASSWORD:
@@ -499,7 +524,16 @@ class H(BaseHTTPRequestHandler):
                                 if f.lower().endswith(want)], reverse=True)[:60]
             except OSError:
                 files = []
-            return self._send(200, json.dumps({"files": files}))
+            tags = {}
+            for f in files:
+                mp = os.path.join(META_DIR, f + ".json")
+                if os.path.isfile(mp):
+                    try:
+                        with open(mp) as fh:
+                            tags[f] = json.load(fh)
+                    except (OSError, ValueError):
+                        pass
+            return self._send(200, json.dumps({"files": files, "tags": tags}))
         if p.path.startswith("/images/"):
             name = os.path.basename(urllib.parse.unquote(p.path[len("/images/"):]))
             fp = os.path.join(IMAGE_DIR, name)
@@ -557,6 +591,7 @@ class H(BaseHTTPRequestHandler):
         return self._dispatch(p, body)
 
     def _dispatch(self, p, body):
+        self._body = body if isinstance(body, dict) else {}
         if p.path == "/api/cinema/compose":
             try:
                 if not str(body.get("scene") or "").strip() and not any(str(x).strip() for x in (body.get("shots") or [])):

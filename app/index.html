@@ -550,7 +550,7 @@
 <script>
 const $ = s => document.querySelector(s);
 let VW = 1344, VH = 768, VMODE = 't2v', VIMG = null, VREFS = [], LAST = null, BUSY = false;
-let TAB = 'video', IW = 1728, IH = 1152, ILAST = null;
+let TAB = 'video', IW = 1728, IH = 1152, ILAST = null, GTAGS = {};
 let FREEMSG = null;   // declared up here: status() runs at load and reads it (TDZ)
 
 // Renders run as server-side jobs: jfetch() posts with X-Backlot-Async, gets a job id back
@@ -1014,15 +1014,23 @@ function loadGallery(){
   const img = TAB === 'image';
   fetch('/api/gallery?kind=' + (img ? 'image' : 'video')).then(r=>r.json()).then(d=>{
     const base = img ? '/images/' : '/outputs/';
-    $('#gallery').innerHTML = (d.files||[]).map(f => img
-      ? '<img src="'+base+encodeURIComponent(f)+'" loading="lazy" title="'+f+'" alt="">'
-      : '<video src="'+base+encodeURIComponent(f)+'" muted preload="metadata" title="'+f+'"></video>'
+    GTAGS = d.tags || {};
+    $('#gallery').innerHTML = (d.files||[]).map(f => { const t = GTAGS[f]; const tt = (t ? t.label + ' · ' : '') + f; return img
+      ? '<img src="'+base+encodeURIComponent(f)+'" loading="lazy" title="'+tt+'" alt="">'
+      : '<video src="'+base+encodeURIComponent(f)+'" muted preload="metadata" title="'+tt+'"></video>'; }
     ).join('');
     document.querySelectorAll('#gallery video, #gallery img').forEach(v=>{
       v.addEventListener('click', ()=>{
         const name = decodeURIComponent(v.src.split('/').pop());
-        if(img){ ILAST = name; showImage(v.src, name); paintCrop(); }
-        else   { LAST  = name; showVideo(v.src, name); }
+        const t = GTAGS[name];
+        const meta = t ? t.label + (t.seed != null ? ' · seed ' + t.seed : '') + (t.prompt ? ' · <span class="browse" id="reuse">reuse prompt</span>' : '') : name;
+        if(img){ ILAST = name; showImage(v.src, meta); paintCrop(); }
+        else   { LAST  = name; showVideo(v.src, meta); }
+        const r = document.getElementById('reuse');
+        if(r && t) r.addEventListener('click', ()=>{
+          const box = img ? $('#iprompt') : (TAB === 'moves' ? $('#msubject') : TAB === 'cinema' ? $('#cscene') : $('#prompt'));
+          box.value = t.prompt; box.focus();
+        });
       });
     });
   }).catch(()=>{});
@@ -1085,7 +1093,7 @@ $('#appform').addEventListener('change', async e=>{
 $('#agen').addEventListener('click', async ()=>{
   if(!APP) return; $('#aerr').textContent = '';
   for(const i of APP.inputs){ const v = AVALS[i.k]; if(v == null || (Array.isArray(v) && !v.length) || v === ''){ $('#aerr').textContent = 'Add: ' + i.label; return; } }
-  const req = APP.run(AVALS);
+  const req = APP.run(AVALS); req.body.label = 'App · ' + APP.name;
   setBusy(true, 'running ' + APP.name + ' (' + APP.time + ')…');
   try{
     const r = await jfetch(req.url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(req.body)});
@@ -1148,7 +1156,7 @@ $('#cgen').addEventListener('click', async ()=>{
     const prompt = $('#cprompt').value.trim();
     setBusy(true, 'rendering the scene on MiniMax H3… one clip, every cut inside it');
     const r = await jfetch('/api/video', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({mode: CIMG ? 'i2v' : 't2v', prompt, width: CW, height: CH,
+      body: JSON.stringify({mode: CIMG ? 'i2v' : 't2v', prompt, label: 'Cinema · ' + CPICK.pacing + ' · ' + CPICK.genre, scene: $('#cscene').value, width: CW, height: CH,
         seconds: parseFloat($('#cseconds').value), seed: parseInt($('#cseed').value || '-1'), image: CIMG})});
     const d = await r.json();
     if(!r.ok) throw new Error(d.error || 'render failed');
@@ -1215,7 +1223,7 @@ $('#mgen').addEventListener('click', async ()=>{
   setBusy(true, 'rendering ' + MOVE.name + ' on MiniMax H3…');
   try{
     const r = await jfetch('/api/video', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({mode: MIMG ? 'i2v' : 't2v', move: MOVE.id, subject, width: MW, height: MH,
+      body: JSON.stringify({mode: MIMG ? 'i2v' : 't2v', move: MOVE.id, subject, label: 'Move · ' + MOVE.name, width: MW, height: MH,
         seconds: parseFloat($('#mseconds').value), seed: parseInt($('#mseed').value || '-1'), image: MIMG})});
     const d = await r.json();
     if(!r.ok) throw new Error(d.error || 'generation failed');

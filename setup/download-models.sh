@@ -47,6 +47,9 @@ if [ "$ALL" = "--all" ]; then
   get Comfy-Org/Qwen-Image-2.1                loras/qwen_image_2.1_turbo_lora_avg_rank_178_bf16.safetensors loras
   get Comfy-Org/Qwen-Image-2.1                text_encoders/qwen3vl_8b_int8_convrot.safetensors  text_encoders
   get Comfy-Org/Qwen-Image-2.1                vae/qwen_image_2.1_vae_bf16.safetensors            vae
+  get Comfy-Org/MOSS-Image                    diffusion_models/moss_image_sft_int8_convrot.safetensors diffusion_models
+  get Comfy-Org/MOSS-Image                    text_encoders/qwen3.5_9b_w4a8_gptq.safetensors     text_encoders
+  get Comfy-Org/MOSS-Image                    vae/flux2-vae_small.safetensors                    vae
   get numz/SeedVR2_comfyUI                    seedvr2_ema_3b_fp8_e4m3fn.safetensors             SEEDVR2
   get numz/SeedVR2_comfyUI                    ema_vae_fp16.safetensors                          SEEDVR2
   get ai-forever/Real-ESRGAN                  RealESRGAN_x2.pth                                 upscale_models

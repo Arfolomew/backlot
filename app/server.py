@@ -56,6 +56,19 @@ QWEN21_UNET = "qwen_image_2.1_int8_convrot.safetensors"
 QWEN21_LORA = "qwen_image_2.1_turbo_lora_avg_rank_178_bf16.safetensors"
 QWEN21_TE = "qwen3vl_8b_int8_convrot.safetensors"
 QWEN21_VAE = "qwen_image_2.1_vae_bf16.safetensors"
+
+# MOSS-Image (ComfyUI 0.42+). The text-and-layout model: every prompted word rendered correctly in
+# our tests, including a five-line price list and a URL. Official template graph: skip-layer guidance
+# on single layer 22 for the first half, 25 steps, CFG 2.5, er_sde/simple, fixed negative. 16 s per
+# image at about 1 MP on a 16 GB card. Layout mode sends the node's own JSON (pixel boxes centered on
+# the canvas) so each text block lands where the form put it. Photoreal stays on Krea.
+MOSS_UNET = "moss_image_sft_int8_convrot.safetensors"
+MOSS_TE = "qwen3.5_9b_w4a8_gptq.safetensors"
+MOSS_VAE = "flux2-vae_small.safetensors"
+MOSS_NEG = "nsfw, worst quality, bad anatomy, watermark, jpeg artifact"
+MOSS_STEPS = 25
+MOSS_CFG = 2.5
+MOSS_MAX_PIXELS = 1_500_000      # tested up to 1.44 MP on 16 GB; 2 MP is untested
 QWEN21_STEPS = 8
 QWEN21_MAX_REFS = 10
 # ORB360 360-orbit LoRA (MatlowAI, Ref2VA). Prompts = the author's captions, in prompts/.
@@ -298,6 +311,78 @@ def vlo_free():
 
 BACKEND_DOWN = (f"ComfyUI is not reachable through the Comfy API at {COMFY}. "
                 "Start ComfyUI and comfy-api-proxy (see README).")
+
+
+def build_moss(prompt, width, height, steps=MOSS_STEPS, seed=7, prefix="moss/Backlot"):
+    """The MOSS-Image text-to-image graph (ComfyUI's own template), unchanged."""
+    return {
+        "1": {"class_type": "UNETLoader", "inputs": {"unet_name": MOSS_UNET, "weight_dtype": "default"}},
+        "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": MOSS_TE, "type": "moss_image", "device": "default"}},
+        "3": {"class_type": "VAELoader", "inputs": {"vae_name": MOSS_VAE}},
+        "4": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}},
+        "5": {"class_type": "CLIPTextEncode", "inputs": {"text": MOSS_NEG, "clip": ["2", 0]}},
+        "6": {"class_type": "EmptyFlux2LatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
+        "15": {"class_type": "SkipLayerGuidanceDiTSimple", "inputs": {
+            "model": ["1", 0], "double_layers": "", "single_layers": "22", "start_percent": 0.0, "end_percent": 0.5}},
+        "7": {"class_type": "KSampler", "inputs": {
+            "model": ["15", 0], "positive": ["4", 0], "negative": ["5", 0], "latent_image": ["6", 0],
+            "seed": seed, "steps": steps, "cfg": MOSS_CFG, "sampler_name": "er_sde", "scheduler": "simple", "denoise": 1.0}},
+        "8": {"class_type": "VAEDecode", "inputs": {"samples": ["7", 0], "vae": ["3", 0]}},
+        "9": {"class_type": "SaveImage", "inputs": {"images": ["8", 0], "filename_prefix": prefix}},
+    }
+
+
+# Layout mode: the poster form -> MOSS layout JSON. Each field becomes one box, stacked top to
+# bottom; empty fields drop out and the rest spread to fill the canvas. Heights are weights
+# (share of the usable canvas), captions tell MOSS how to set each block.
+MOSS_LAYOUT_SLOTS = (
+    # key, weight, is_text, caption
+    ("headline", 0.18, True,  "Large bold display capitals, centered, the dominant element."),
+    ("subhead",  0.08, True,  "Smaller script or italic banner line, centered."),
+    ("lines",    0.30, True,  "Left-aligned list, one item per line, clean sans-serif, even spacing, every line legible."),
+    ("art",      0.28, False, None),
+    ("footer",   0.05, True,  "Small spaced capitals, centered."),
+    ("url",      0.04, True,  "Small lowercase web address, centered."),
+)
+
+
+def moss_layout_prompt(summary, fields, width, height):
+    """Return the MOSS layout JSON string, or None when no field is filled."""
+    active = []
+    for key, weight, is_text, caption in MOSS_LAYOUT_SLOTS:
+        val = (fields.get(key) or "").strip()
+        if not val:
+            continue
+        if key == "lines":
+            lines = [ln.strip() for ln in val.splitlines() if ln.strip()]
+            val = "\n".join(lines)
+            weight = min(0.45, 0.05 * len(lines) + 0.02)
+        active.append((key, weight, is_text, caption, val))
+    if not active:
+        return None
+    margin_x, top, bottom, gap = 0.08, 0.06, 0.05, 0.025
+    usable = 1.0 - top - bottom - gap * (len(active) - 1)
+    total = sum(a[1] for a in active)
+    y = top
+    items = []
+    for key, weight, is_text, caption, val in active:
+        h = weight / total * usable
+        x0, x1 = round(width * margin_x), round(width * (1 - margin_x))
+        y0, y1 = round(height * y), round(height * (y + h))
+        if key == "art":
+            # art sits in the middle 70% of the width so it reads as an illustration, not a band
+            x0, x1 = round(width * 0.15), round(width * 0.85)
+            item = {"label": "object", "caption": val}
+        else:
+            item = {"label": "text", "caption": caption, "text": val}
+        item["bbox"] = [y0 - height // 2, x0 - width // 2, y1 - height // 2, x1 - width // 2]
+        items.append(item)
+        y += h + gap
+    summary = (summary or "").strip() or ("Clean printed poster on a flat background, sharp evenly kerned "
+                                          "typography, every word spelled exactly as written.")
+    layout = {"summary": {"caption": summary}, "items": items,
+              "bbox_coord_space": "abs_centralized", "bbox_format": "yxyx"}
+    return json.dumps(layout, ensure_ascii=False, separators=(",", ":"))
 
 
 def submit_and_wait(wf, timeout=1800, exts=(".mp4", ".webm", ".gif"), base=None, staging=None, backend=None):
@@ -892,8 +977,47 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, json.dumps({
                 "ok": True, "freed_mib": freed, "used_mib": gpu_used_mib()}))
 
+        if p.path == "/api/image" and body.get("model") == "moss":
+            # MOSS-Image (see MOSS_* above). text = plain prompt; layout = the poster form.
+            try:
+                prompt = (body.get("prompt") or "").strip()
+                mode = body.get("mode", "text")
+                if mode not in ("text", "layout"):
+                    return self._send(400, json.dumps({"error": "MOSS supports text or layout"}))
+                seed = int(body.get("seed", -1))
+                if seed < 0:
+                    seed = int.from_bytes(os.urandom(4), "big")
+                steps = max(15, min(35, int(body.get("steps", MOSS_STEPS))))
+                width, height = int(body.get("width", 1024)), int(body.get("height", 1408))
+                if width * height > MOSS_MAX_PIXELS:
+                    k = (MOSS_MAX_PIXELS / (width * height)) ** 0.5
+                    width, height = width * k, height * k
+                width = max(256, round(width / 16) * 16)
+                height = max(256, round(height / 16) * 16)
+                if mode == "layout":
+                    text = moss_layout_prompt(prompt, body.get("layout") or {}, width, height)
+                    if text is None:
+                        return self._send(400, json.dumps({"error": "fill in at least one layout field"}))
+                else:
+                    if not prompt:
+                        return self._send(400, json.dumps({"error": "prompt required"}))
+                    text = prompt
+                if not comfy_up():
+                    return self._send(503, json.dumps({"error": BACKEND_DOWN}))
+                wf = build_moss(text, width, height, steps=steps, seed=seed)
+                t0 = time.time()
+                blob, ext, staged = submit_and_wait(wf, timeout=1800, exts=(".png",))
+                kind = "moss-layout" if mode == "layout" else "moss"
+                name, path = save_output(blob, kind=kind, ext=ext, staged=staged, directory=IMAGE_DIR)
+                return self._send(200, json.dumps({
+                    "url": f"/images/{name}", "file": path, "seed": seed, "steps": steps,
+                    "width": width, "height": height, "mode": mode, "model": "moss",
+                    "denoise": None, "took": round(time.time() - t0, 1)}))
+            except Exception as e:
+                return self._send(500, json.dumps({"error": str(e)}))
+
         if p.path == "/api/image" and body.get("model") == "qwen21":
-            # Qwen Image 2.1 + Kijai turbo LoRA on :8191 (see VLO above). Two modes:
+            # Qwen Image 2.1 + Kijai turbo LoRA (ComfyUI 0.38+; on 0.42+ the same backend as H3). Two modes:
             #   text = text-to-image at the aspect buttons' size (multiples of 32);
             #   edit = instruction edit of 1..10 reference images, output in image 1's shape
             #          at ~1 MP (the encoder sizes the latent off the first reference).

@@ -86,7 +86,8 @@
   .ratio{ padding:9px 0; text-align:center; background:rgba(255,255,255,.05); border:1px solid transparent; border-radius:var(--r-sm); cursor:pointer;
     font-size:12px; font-weight:600; color:var(--muted); user-select:none; transition:background .18s var(--ease), color .18s var(--ease), border-color .18s var(--ease); }
   .ratio:hover{ background:rgba(255,255,255,.09); color:var(--text); }
-  .ratio.active{ border-color:var(--accent); color:var(--text); background:var(--accent-soft); }
+  .ratio.active{ border-color:transparent; color:#000; background:var(--accent); box-shadow:0 1px 2px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.22); }
+  .ratio.active:hover{ background:var(--accent-hi); color:#000; }
   .row{ display:flex; gap:10px; }
   .row > div{ flex:1; }
   .slider-row{ display:flex; align-items:center; gap:10px; }
@@ -139,7 +140,7 @@
   .upscale-block{ margin-top:auto; padding-top:22px; border-top:1px solid var(--line); }
   .upscale{ width:100%; padding:13px; border-radius:var(--r); cursor:pointer; font-weight:600; font-size:14px; letter-spacing:-.01em;
     color:var(--accent-hi); background:rgba(255,255,255,.05); border:1px solid var(--line2); transition:background .18s var(--ease), border-color .18s var(--ease); }
-  .upscale:hover{ background:var(--accent-soft); border-color:var(--accent); }
+  .upscale:hover{ background:var(--accent); border-color:var(--accent); color:#000; }
   .upscale:disabled{ opacity:.45; cursor:wait; }
   .browse{ display:block; margin-top:8px; font-size:12px; color:var(--accent-hi); cursor:pointer; text-align:center; font-weight:500; }
   #vidfile{ display:none; }

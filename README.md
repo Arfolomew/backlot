@@ -172,6 +172,7 @@ Everything is an environment variable; `start.sh` sets the first two for you.
 | `BACKLOT_QWEN_URL` | same as `BACKLOT_COMFY_URL` | Optional second Comfy API endpoint (a second proxy) if Qwen Image 2.1 runs on a different ComfyUI, e.g. a newer install. Backlot frees one backend's VRAM before using the other. |
 | `BACKLOT_OUTPUT_DIR` | `./output` | Where videos and images are filed (`videos/`, `images/`). |
 | `BACKLOT_COMFY_OUTPUT_DIR` | unset | ComfyUI's output folder. Lets latent chaining list the clips it has saved. |
+| `BACKLOT_VIDEO_DIR`, `BACKLOT_IMAGE_DIR`, `BACKLOT_AUDIO_DIR`, `BACKLOT_META_DIR` | `<output>/videos` etc. | Point any one folder at a library you already have. |
 | `PORT` | `8801` | App port. |
 
 ## How it is built

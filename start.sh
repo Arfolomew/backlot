@@ -49,5 +49,6 @@ if ! curl -s -m 1 "http://127.0.0.1:$PORT/api/status" >/dev/null; then
 fi
 
 echo "Backlot -> http://localhost:$PORT   (Comfy API: $BACKLOT_COMFY_URL -> $COMFYUI_URL)"
-if command -v xdg-open >/dev/null; then xdg-open "http://localhost:$PORT" >/dev/null 2>&1 || true
+if [ -n "${BACKLOT_NO_OPEN:-}" ]; then :    # a wrapper will open its own window
+elif command -v xdg-open >/dev/null; then xdg-open "http://localhost:$PORT" >/dev/null 2>&1 || true
 elif command -v open >/dev/null; then open "http://localhost:$PORT" || true; fi

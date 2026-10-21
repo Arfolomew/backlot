@@ -40,6 +40,8 @@ from comfy_backend import Backend, gpu_used_mib   # noqa: E402
 #   BACKLOT_QWEN_URL           optional second Comfy API endpoint for Qwen Image 2.1 (default: same as above).
 #   BACKLOT_QWEN_COMFYUI_URL   its plain ComfyUI, same purpose as BACKLOT_COMFYUI_URL.
 #   BACKLOT_OUTPUT_DIR         where finished videos and images are filed (default: ./output).
+#   BACKLOT_VIDEO_DIR / BACKLOT_IMAGE_DIR / BACKLOT_AUDIO_DIR / BACKLOT_META_DIR
+#                              optional per-folder overrides (default: <output>/videos, images, audio, meta).
 #   BACKLOT_COMFY_OUTPUT_DIR   optional: ComfyUI's output folder, so latent chaining can list saved clips.
 #   PORT                  app port (default 8801).
 COMFY = os.environ.get("BACKLOT_COMFY_URL", "http://127.0.0.1:8199").rstrip("/")
@@ -80,10 +82,14 @@ ORB360_SIZES = {"land": (1152, 768), "port": (832, 1024), "square": (800, 800)}
 
 # Every output this app produces lands under OUTPUT_ROOT, nowhere else.
 OUTPUT_ROOT = os.path.expanduser(os.environ.get("BACKLOT_OUTPUT_DIR", os.path.join(HERE, "..", "output")))
-VIDEO_DIR = os.path.join(OUTPUT_ROOT, "videos")
-IMAGE_DIR = os.path.join(OUTPUT_ROOT, "images")
-AUDIO_DIR = os.path.join(OUTPUT_ROOT, "audio")
-META_DIR = os.path.join(OUTPUT_ROOT, "meta")      # one small JSON per output: what made it (Oct 20 2026)
+# Each folder can also be pointed somewhere on its own (BACKLOT_VIDEO_DIR etc.), so Backlot can
+# file into a library you already have instead of its own videos/ images/ audio/ layout.
+def _out_dir(var, default):
+    return os.path.expanduser(os.environ.get(var) or os.path.join(OUTPUT_ROOT, default))
+VIDEO_DIR = _out_dir("BACKLOT_VIDEO_DIR", "videos")
+IMAGE_DIR = _out_dir("BACKLOT_IMAGE_DIR", "images")
+AUDIO_DIR = _out_dir("BACKLOT_AUDIO_DIR", "audio")
+META_DIR = _out_dir("BACKLOT_META_DIR", "meta")      # one small JSON per output: what made it (Oct 20 2026)
 os.makedirs(META_DIR, exist_ok=True)
 os.makedirs(AUDIO_DIR, exist_ok=True)
 

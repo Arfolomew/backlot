@@ -466,14 +466,17 @@ def build_sa3(prompt, seconds, seed, steps=8, prefix="audio/Backlot_sfx"):
     }
 
 
-def wav_to_mp3(wav_bytes, out_path):
-    """Loudness-normalize (-14 LUFS, -1.5 dBTP, the streaming target) and write 320k MP3."""
+def wav_to_mp3(wav_bytes, out_path, title=None):
+    """Loudness-normalize (-14 LUFS, -1.5 dBTP, the streaming target) and write 320k MP3.
+    ``title`` goes into the ID3 tag so players show it."""
     tmp = out_path + ".wav"
     with open(tmp, "wb") as f:
         f.write(wav_bytes)
+    tags = ["-metadata", f"title={title}", "-metadata", "artist=Backlot"] if title else []
     try:
         subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", tmp, "-af", "loudnorm=I=-14:TP=-1.5:LRA=11",
-                        "-codec:a", "libmp3lame", "-b:a", "320k", out_path], check=True, timeout=300)
+                        "-codec:a", "libmp3lame", "-b:a", "320k", "-id3v2_version", "3", *tags, out_path],
+                       check=True, timeout=300)
     finally:
         try:
             os.remove(tmp)
@@ -1177,12 +1180,20 @@ class H(BaseHTTPRequestHandler):
                     return self._send(503, json.dumps({"error": BACKEND_DOWN}))
                 t0 = time.time()
                 blob, ext, _ = submit_and_wait(wf, timeout=1800, exts=(".wav", ".flac"))
-                name = f"{engine}_{time.strftime('%Y-%m-%d_%H%M%S')}.mp3"
+                title = re.sub(r"\s+", " ", str(body.get("title") or "")).strip()[:80]
+                if title:
+                    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-") or "song"
+                    name, i = f"{slug}.mp3", 2
+                    while os.path.exists(os.path.join(AUDIO_DIR, name)):
+                        name, i = f"{slug}-{i}.mp3", i + 1
+                    label = title
+                else:
+                    name = f"{engine}_{time.strftime('%Y-%m-%d_%H%M%S')}.mp3"
                 path = os.path.join(AUDIO_DIR, name)
-                wav_to_mp3(blob, path)
+                wav_to_mp3(blob, path, title=title or None)
                 return self._send(200, json.dumps({
                     "url": f"/audio/{name}", "file": path, "seed": seed, "seconds": seconds, "engine": engine,
-                    "label": label[:80], "took": round(time.time() - t0, 1)}))
+                    "title": title, "label": label[:80], "took": round(time.time() - t0, 1)}))
             except Exception as e:
                 return self._send(500, json.dumps({"error": str(e)}))
 

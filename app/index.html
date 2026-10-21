@@ -327,6 +327,9 @@
       </div>
       <div class="hint" id="auhint">Lyrics and a style line in, a full song with vocals out. 48 kHz, about 15 s per 30 s of song.</div>
       <div id="au-song">
+        <label>Song title</label>
+        <input type="text" id="autitle" placeholder="Harbor Lights" maxlength="80">
+        <div class="hint">Names the file and the track tag. Leave blank for a timestamped name.</div>
         <label>Style</label>
         <input type="text" id="austyle" placeholder="pop, upbeat, female vocal, bright synths, 120 bpm">
         <label>Lyrics</label>
@@ -1231,6 +1234,7 @@ $('#augen').addEventListener('click', async () => {
   const song = AENGINE === 'song';
   const body = { engine: AENGINE, mode: AENGINE, seconds: +$('#aulen').value, seed: parseInt($('#auseed').value || '-1') };
   if(song){
+    body.title = $('#autitle').value.trim();
     body.style = $('#austyle').value.trim(); body.lyrics = $('#aulyrics').value.trim();
     body.plan = document.querySelector('#auplan .ratio.active').dataset.plan;
     body.loras = [...document.querySelectorAll('#auloras .ratio.active')].map(x => ({file: x.dataset.file}));
@@ -1246,7 +1250,7 @@ $('#augen').addEventListener('click', async () => {
     const r = await fetch('/api/audio', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     const d = await r.json();
     if(!r.ok) throw new Error(d.error || 'generation failed');
-    showAudio(d.url + '?t=' + Date.now(), d.seconds + ' s · seed ' + d.seed + ' · ' + d.took + 's · ' + (song ? 'YuE2' : 'Stable Audio 3'));
+    showAudio(d.url + '?t=' + Date.now(), (d.title ? d.title + ' · ' : '') + d.seconds + ' s · seed ' + d.seed + ' · ' + d.took + 's · ' + (song ? 'YuE2' : 'Stable Audio 3'));
     loadGallery();
   }catch(e){
     $('#auerr').textContent = e.message;

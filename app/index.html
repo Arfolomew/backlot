@@ -679,6 +679,7 @@
         <div class="ratio" data-w="1152" data-h="1728">2:3</div>
         <div class="ratio" data-w="1920" data-h="1088">16:9</div>
         <div class="ratio" data-w="1088" data-h="1920">9:16</div>
+        <div class="ratio" data-w="0" data-h="0" id="iratio-src" style="display:none">Source</div>
       </div>
       <div class="hint" id="idimhint">1728 &times; 1152 (~2 MP, the Oct 4 bake-off winner)</div>
 
@@ -1671,9 +1672,23 @@ $('#iratio').addEventListener('click', e=>{
   document.querySelectorAll('#iratio .ratio').forEach(x=>x.classList.remove('active'));
   b.classList.add('active');
   IW = +b.dataset.w; IH = +b.dataset.h;
-  $('#idimhint').textContent = IW + ' × ' + IH;
+  paintDimHint();
   paintSteps();
 });
+// In image-to-image the "Source" pill keeps the input's own shape; any other ratio center-crops the input.
+function paintDimHint(){
+  $('#idimhint').textContent = IW === 0 ? 'Keeps the input image\u2019s shape' : IW + ' \u00d7 ' + IH + (IMODE === 'img2img' ? ', the input is cropped from the center to fit' : '');
+}
+function paintRatioForMode(){
+  const i2i = IMODE === 'img2img', src = $('#iratio-src');
+  src.style.display = i2i ? '' : 'none';
+  src.style.gridColumn = i2i ? '1 / -1' : '';
+  if(i2i && !src.classList.contains('active') && !RATIO_TOUCHED){ document.querySelectorAll('#iratio .ratio').forEach(x=>x.classList.remove('active')); src.classList.add('active'); IW = 0; IH = 0; }
+  if(!i2i && IW === 0){ src.classList.remove('active'); const d = document.querySelector('#iratio .ratio[data-w="1728"]'); d.classList.add('active'); IW = 1728; IH = 1152; }
+  paintDimHint();
+}
+let RATIO_TOUCHED = false;
+$('#iratio').addEventListener('click', () => { RATIO_TOUCHED = IMODE === 'img2img' && IW !== 0; });
 
 // Flux2Scheduler takes 1..4096. Linear would put 15 steps under every pixel of
 // travel, so the slider is log-mapped: position 0..1000 -> 4096^(pos/1000).
@@ -1681,7 +1696,7 @@ const STEP_MAX = 4096;
 const posToSteps = v => Math.max(1, Math.min(STEP_MAX, Math.round(Math.pow(STEP_MAX, v/1000))));
 function estimate(steps){
   // Measured on this card at 1216x832: 8->15s, 20->27s, 32->42s. Scale by area.
-  const secs = (6 + 1.15 * steps) * ((IW*IH) / (1216*832));
+  const secs = (6 + 1.15 * steps) * (((IW || 1728)*(IH || 1152)) / (1216*832));
   return secs < 90 ? Math.round(secs) + 's' : (secs/60).toFixed(1) + ' min';
 }
 function paintSteps(){
@@ -1739,7 +1754,7 @@ $('#igen').addEventListener('click', async ()=>{
     : IMODE === 'edit' ? 'editing with Qwen-Image-Edit… about 25 s' : 'generating on Krea 2 Turbo' + label + '… ' + steps + ' steps');
   try{
     const r = await jfetch('/api/image', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({prompt, width:IW, height:IH, steps,
+      body: JSON.stringify({prompt, width: IW || 1728, height: IH || 1152, steps, match_source: IW === 0,
         seed: parseInt($('#iseed').value || '-1'),
         prompt_weight: $('#pweight').checked,
         mode: IMODE,
@@ -1777,7 +1792,8 @@ document.querySelectorAll('#imode .ratio').forEach(el => el.addEventListener('cl
   $('#iref-note').style.display = IMODE === 'reference' ? 'block' : 'none';
   $('#iid-note').style.display = IMODE === 'identity' ? 'block' : 'none';
   $('#iedit-note').style.display = IMODE === 'edit' ? 'block' : 'none';
-  $('#iratio').style.opacity = (IMODE === 'img2img' || IMODE === 'edit') ? '0.4' : '1';
+  $('#iratio').style.opacity = IMODE === 'edit' ? '0.4' : '1';
+  RATIO_TOUCHED = false; paintRatioForMode();
   paintAngleMode();
 }));
 function setSrcThumb(url){ const t = $('#isrcthumb'); t.src = url; t.style.display = 'block'; }
@@ -1806,7 +1822,7 @@ function paintModel(){
   const qwen = IMODEL === 'qwen21', mossOn = IMODEL === 'moss';
   document.querySelectorAll('#imode .ratio').forEach(x => {
     const m = x.dataset.mode;
-    const ok = mossOn ? (m === 'text' || m === 'layout') : m !== 'layout' && (!qwen || m === 'text' || m === 'edit');
+    const ok = mossOn ? (m === 'text' || m === 'layout' || m === 'img2img') : m !== 'layout' && (!qwen || m === 'text' || m === 'edit');
     x.style.display = ok ? '' : 'none';
   });
   $('#imodelhint').innerHTML = mossOn
@@ -1827,7 +1843,7 @@ $('#imodel').addEventListener('click', e => {
   document.querySelectorAll('#imodel .ratio').forEach(x => x.classList.remove('active'));
   b.classList.add('active'); IMODEL = b.dataset.model;
   if((IMODEL === 'qwen21' && IMODE !== 'text' && IMODE !== 'edit') || (IMODEL !== 'krea2' && IMODE === 'angles')
-     || (IMODEL === 'moss' && IMODE !== 'text' && IMODE !== 'layout') || (IMODEL !== 'moss' && IMODE === 'layout'))
+     || (IMODEL === 'moss' && IMODE !== 'text' && IMODE !== 'layout' && IMODE !== 'img2img') || (IMODEL !== 'moss' && IMODE === 'layout'))
     document.querySelector('#imode .ratio[data-mode="text"]').click();
   else { paintModel(); document.querySelector('#imode .ratio.active').click(); }
 });

@@ -1341,8 +1341,8 @@ class H(BaseHTTPRequestHandler):
             try:
                 prompt = (body.get("prompt") or "").strip()
                 mode = body.get("mode", "text")
-                if mode not in ("text", "layout"):
-                    return self._send(400, json.dumps({"error": "MOSS supports text or layout"}))
+                if mode not in ("text", "layout", "img2img"):
+                    return self._send(400, json.dumps({"error": "MOSS supports text, layout or img2img"}))
                 seed = int(body.get("seed", -1))
                 if seed < 0:
                     seed = int.from_bytes(os.urandom(4), "big")
@@ -1363,15 +1363,57 @@ class H(BaseHTTPRequestHandler):
                     text = prompt
                 if not comfy_up():
                     return self._send(503, json.dumps({"error": BACKEND_DOWN}))
+                # img2img (Oct 21 2026): encode the input and denoise only part of the way, same idea as
+                # Krea's img2img. "Source" shape keeps the input's aspect at MOSS's usual size; a picked
+                # ratio center-crops the input to that shape first.
+                up_name, denoise = None, None
+                if mode == "img2img":
+                    from PIL import Image
+                    import io
+                    raw = None
+                    if body.get("image"):
+                        raw = base64.b64decode(str(body["image"]).split(",")[-1])
+                    elif body.get("source"):
+                        cand = os.path.join(IMAGE_DIR, os.path.basename(body["source"]))
+                        if os.path.isfile(cand):
+                            with open(cand, "rb") as f:
+                                raw = f.read()
+                    if not raw:
+                        return self._send(400, json.dumps({"error": "add an input image first"}))
+                    im = Image.open(io.BytesIO(raw)).convert("RGB")
+                    if body.get("match_source", True):
+                        ar = im.width / im.height
+                        width = max(256, round((1024 * 1408 * ar) ** 0.5 / 16) * 16)
+                        height = max(256, round((1024 * 1408 / ar) ** 0.5 / 16) * 16)
+                    denoise = max(0.05, min(1.0, float(body.get("denoise", 0.55))))
+                    buf = io.BytesIO()
+                    im.save(buf, "PNG")
+                    up_name = upload_to_comfy(buf.getvalue(), f"mmstudio_moss_{int(time.time())}.png")
                 wf = build_moss(text, width, height, steps=steps, seed=seed)
+                if up_name:
+                    wf["20"] = {"class_type": "LoadImage", "inputs": {"image": up_name}}
+                    wf["21"] = {"class_type": "ImageScale", "inputs": {
+                        "image": ["20", 0], "upscale_method": "lanczos",
+                        "width": width, "height": height, "crop": "center"}}
+                    wf["22"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["21", 0], "vae": ["3", 0]}}
+                    wf["7"]["inputs"]["latent_image"] = ["22", 0]
+                    wf["7"]["inputs"]["denoise"] = denoise
+                    del wf["6"]
                 t0 = time.time()
-                blob, ext, staged = submit_and_wait(wf, timeout=1800, exts=(".png",))
-                kind = "moss-layout" if mode == "layout" else "moss"
+                try:
+                    blob, ext, staged = submit_and_wait(wf, timeout=1800, exts=(".png",))
+                finally:
+                    if up_name:
+                        try:
+                            discard_upload(up_name)
+                        except Exception:
+                            pass
+                kind = {"layout": "moss-layout", "img2img": "moss-img2img"}.get(mode, "moss")
                 name, path = save_output(blob, kind=kind, ext=ext, staged=staged, directory=IMAGE_DIR)
                 return self._send(200, json.dumps({
                     "url": f"/images/{name}", "file": path, "seed": seed, "steps": steps,
                     "width": width, "height": height, "mode": mode, "model": "moss",
-                    "denoise": None, "took": round(time.time() - t0, 1)}))
+                    "denoise": denoise, "took": round(time.time() - t0, 1)}))
             except Exception as e:
                 return self._send(500, json.dumps({"error": str(e)}))
 
@@ -1536,7 +1578,9 @@ class H(BaseHTTPRequestHandler):
                         return self._send(400, json.dumps({"error": "add an input image first"}))
                     im = Image.open(io.BytesIO(raw)).convert("RGB")
                     if mode == "img2img" and body.get("match_source", True):
-                        # Keep the input's shape at ~2 MP (the bake-off winner), multiples of 16.
+                        # "Source" shape: keep the input's aspect at ~2 MP (the bake-off winner), multiples of 16.
+                        # Any other ratio from the picker arrives as width/height and the ImageScale node
+                        # below center-crops the input to it (Oct 21 2026: 16:9 in, 9:16 out works).
                         ar = im.width / im.height
                         width = max(256, round((KREA_TARGET_PIXELS * ar) ** 0.5 / 16) * 16)
                         height = max(256, round((KREA_TARGET_PIXELS / ar) ** 0.5 / 16) * 16)

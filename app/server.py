@@ -41,6 +41,8 @@ from comfy_backend import Backend, gpu_used_mib   # noqa: E402
 #   BACKLOT_QWEN_COMFYUI_URL   its plain ComfyUI, same purpose as BACKLOT_COMFYUI_URL.
 #   BACKLOT_OUTPUT_DIR         where finished videos and images are filed (default: ./output).
 #   BACKLOT_VIDEO_DIR / BACKLOT_IMAGE_DIR / BACKLOT_AUDIO_DIR / BACKLOT_META_DIR
+#   BACKLOT_MASTER_PY          python with the mastering deps (setup/master/README.md); default
+#                              setup/master/.venv/bin/python if present. Unset or missing = no mastering.
 #                              optional per-folder overrides (default: <output>/videos, images, audio, meta).
 #   BACKLOT_COMFY_OUTPUT_DIR   optional: ComfyUI's output folder, so latent chaining can list saved clips.
 #   PORT                  app port (default 8801).
@@ -118,6 +120,73 @@ for _s, _l in [("male", "Male vocal"), ("female", "Female vocal"), ("hiphop", "H
                ("disco-funk", "Disco funk"), ("lofi", "Lo-fi"), ("kpop", "K-pop"), ("reggaeton", "Reggaeton"),
                ("afrobeats", "Afrobeats")]:
     YUE2_LORAS[f"slider-{_s}.safetensors"] = {"label": _l, "slot": "clip", "default": 0.6}
+# TRBDR 1960s folk (becausereasons): trained on BOTH halves, so slot "both" puts the strength on the
+# planner and the decoder. Needs its trigger word "trbdr" in the style; a blank style gets the version's
+# own style line. Author recommends Full plan, strength 1.0. Male voice, often 3/4 time.
+_TRBDR_SOLO = ("trbdr, English, 1960s American folk, solo male singer-songwriter, raw nasal voice, "
+               "fingerpicked acoustic guitar, harmonica, intimate room recording, clear diction")
+for _s, _l, _st in [
+        ("lantern", "60s folk: Lantern (fingerpicked)", _TRBDR_SOLO),
+        ("porch", "60s folk: Porch (country band)", "trbdr, English, 1960s country folk, male lead vocal, acoustic guitar, "
+         "upright bass, light brushed drums, harmonica, porch band feel, clear diction"),
+        ("broadside", "60s folk: Broadside (protest)", "trbdr, English, 1960s acoustic folk, protest ballad, raw nasal male "
+         "vocal with earnest storytelling delivery, solo strummed acoustic guitar, plaintive harmonica solos, "
+         "intimate dry vintage recording"),
+        ("hearth", "60s folk: Hearth", _TRBDR_SOLO),
+        ("ferryman", "60s folk: Ferryman", _TRBDR_SOLO)]:
+    YUE2_LORAS[f"trbdr_{_s}.safetensors"] = {"label": _l, "slot": "both", "default": 1.0, "style": _st}
+
+
+def apply_trigger_style(style, loras):
+    """LoRAs with a trigger word need it in the style. Blank style -> the first such LoRA's own style line;
+    otherwise the trigger is prepended when missing."""
+    for name, _ in loras:
+        meta = YUE2_LORAS.get(name) or {}
+        if meta.get("style"):
+            trigger = meta["style"].split(",")[0].strip()
+            if not style:
+                return meta["style"]
+            return style if re.search(r"\b" + re.escape(trigger) + r"\b", style, re.I) else f"{trigger}, {style}"
+    return style
+
+
+# Mastering + quality score after a song (setup/master/, CPU, optional).
+MASTER_PY = os.path.expanduser(os.environ.get("BACKLOT_MASTER_PY") or
+                               os.path.join(HERE, "..", "setup", "master", ".venv", "bin", "python"))
+MASTER_SCRIPT = os.path.join(HERE, "..", "setup", "master", "process.py")
+MASTER_LUFS = -10.0
+
+
+def master_take(wav_bytes, base_path, title=None):
+    """Raw float WAV -> base.flac (raw, 24-bit) + base-master.flac + base-master.mp3 + a score.
+    Returns (mp3_path, report) or None when mastering is not set up or failed; the caller falls back."""
+    if not (os.path.isfile(MASTER_PY) and os.path.isfile(MASTER_SCRIPT)):
+        return None
+    tmp = base_path + ".raw.wav"
+    try:
+        with open(tmp, "wb") as f:
+            f.write(wav_bytes)
+        r = subprocess.run([MASTER_PY, MASTER_SCRIPT, tmp, base_path, "--target", str(MASTER_LUFS)],
+                           capture_output=True, text=True, timeout=900)
+        line = (r.stdout.strip().splitlines() or [""])[-1]
+        mp3 = base_path + "-master.mp3"
+        if r.returncode != 0 or not line.startswith("{") or not os.path.isfile(mp3):
+            print(f"[master] failed ({r.returncode}): {r.stderr.strip()[-300:]}", flush=True)
+            return None
+        if title:   # process.py writes no tags; add the title so players show it
+            tagged = mp3 + ".tag.mp3"
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", mp3, "-c", "copy", "-id3v2_version", "3",
+                            "-metadata", f"title={title}", "-metadata", "artist=Backlot", tagged], check=True, timeout=120)
+            os.replace(tagged, mp3)
+        return mp3, json.loads(line)
+    except Exception as e:
+        print(f"[master] error: {e}", flush=True)
+        return None
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
 TMP_DIR = os.path.join(OUTPUT_ROOT, ".tmp")
 for _d in (VIDEO_DIR, IMAGE_DIR, TMP_DIR):
     os.makedirs(_d, exist_ok=True)
@@ -600,7 +669,7 @@ class H(BaseHTTPRequestHandler):
                 return
             req = self._body or {}
             mode = req.get("mode") or ""
-            label = str(req.get("label") or "").strip()
+            label = str(req.get("label") or d.get("title") or "").strip()   # a song's title is its label
             if not label:
                 label = {"t2v": "Video", "i2v": "Image to Video", "ref": "Reference", "orbit": "360 Orbit",
                          "swap": "Character Swap", "edit": "Edit", "angles": "Angles",
@@ -608,6 +677,12 @@ class H(BaseHTTPRequestHandler):
             meta = {"label": label[:80], "mode": mode, "move": req.get("move"), "seed": d.get("seed"),
                     "prompt": str(req.get("prompt") or req.get("subject") or req.get("scene") or "")[:400],
                     "took": d.get("took"), "made": time.strftime("%Y-%m-%d %H:%M")}
+            if url.startswith("/audio/"):
+                if req.get("lyrics"):
+                    meta["lyrics"] = str(req["lyrics"])[:6000]
+                if d.get("score") is not None:
+                    meta["score"] = d["score"]
+                meta["mastered"] = bool(d.get("mastered"))
             with open(os.path.join(META_DIR, os.path.basename(url) + ".json"), "w") as f:
                 json.dump(meta, f)
         except Exception:
@@ -736,6 +811,20 @@ class H(BaseHTTPRequestHandler):
                             tags[f] = json.load(fh)
                     except (OSError, ValueError):
                         pass
+                elif kind == "audio":
+                    # A song library made elsewhere may keep <stem>.json beside <stem>-master.mp3
+                    stem = re.sub(r"(-master)?\.(mp3|wav)$", "", f, flags=re.I)
+                    sp = os.path.join(folder, stem + ".json")
+                    if os.path.isfile(sp):
+                        try:
+                            with open(sp) as fh:
+                                j = json.load(fh)
+                            tags[f] = {"label": j.get("title") or stem, "mode": "song", "seed": j.get("seed"),
+                                       "prompt": str(j.get("style") or "")[:400], "lyrics": j.get("lyrics"),
+                                       "score": j.get("score"), "mastered": bool(j.get("mastered")),
+                                       "took": j.get("render_seconds"), "made": j.get("created")}
+                        except (OSError, ValueError):
+                            pass
             return self._send(200, json.dumps({"files": files, "tags": tags}))
         if p.path.startswith("/images/"):
             name = os.path.basename(urllib.parse.unquote(p.path[len("/images/"):]))
@@ -826,6 +915,16 @@ class H(BaseHTTPRequestHandler):
                 os.remove(os.path.join(META_DIR, name + ".json"))
             except OSError:
                 pass
+            if kind == "audio":
+                # a mastered song is a set: <stem>.flac, <stem>-master.flac, <stem>-master.mp3, <stem>.json
+                stem = re.sub(r"(-master)?\.(mp3|wav)$", "", name, flags=re.I)
+                for sib in (stem + ".flac", stem + "-master.flac", stem + "-master.mp3", stem + ".mp3", stem + ".json"):
+                    sp = os.path.join(folder, sib)
+                    if sib != name and os.path.isfile(sp):
+                        try:
+                            os.remove(sp)
+                        except OSError:
+                            pass
             return self._send(200, json.dumps({"ok": True, "deleted": name}))
         if p.path == "/api/cinema/compose":
             try:
@@ -1202,6 +1301,7 @@ class H(BaseHTTPRequestHandler):
                         if name in YUE2_LORAS:
                             strength = float(item.get("strength", YUE2_LORAS[name]["default"])) if isinstance(item, dict) else YUE2_LORAS[name]["default"]
                             loras.append((name, max(0.0, min(1.5, strength))))
+                    style = apply_trigger_style(style, loras)
                     wf = build_yue2(style, lyrics, seconds, seed, plan=plan, loras=loras)
                     label = style
                 else:
@@ -1220,10 +1320,19 @@ class H(BaseHTTPRequestHandler):
                 else:
                     name = f"{engine}_{time.strftime('%Y-%m-%d_%H%M%S')}.mp3"
                 path = os.path.join(AUDIO_DIR, name)
-                wav_to_mp3(blob, path, title=title or None)
+                score, mastered = None, False
+                if engine == "song":
+                    done = master_take(blob, path[:-4], title=title or None)
+                    if done:
+                        path, rep_ = done
+                        name = os.path.basename(path)       # <stem>-master.mp3 sits beside <stem>.flac
+                        score, mastered = rep_.get("score"), True
+                if not mastered:
+                    wav_to_mp3(blob, path, title=title or None)
                 return self._send(200, json.dumps({
                     "url": f"/audio/{name}", "file": path, "seed": seed, "seconds": seconds, "engine": engine,
-                    "title": title, "label": label[:80], "took": round(time.time() - t0, 1)}))
+                    "title": title, "label": label[:80], "took": round(time.time() - t0, 1),
+                    "score": score, "mastered": mastered}))
             except Exception as e:
                 return self._send(500, json.dumps({"error": str(e)}))
 

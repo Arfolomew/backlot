@@ -117,6 +117,11 @@
   .audiobox{ display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%; gap:14px; }
   .audiobox audio{ width:70%; }
   .audiobox .note{ font-size:40px; color:var(--muted); }
+  .audiobox .lyrics{ display:none; width:min(560px,80%); max-height:46%; overflow-y:auto; white-space:pre-wrap; text-align:center;
+    font-size:13.5px; line-height:1.7; color:var(--text); padding:14px 18px; border-radius:var(--r); background:rgba(255,255,255,.04); box-shadow:0 0 0 1px var(--line); }
+  .audiobox .lyrics.open{ display:block; }
+  .audiobox .lyrics .tag{ color:var(--accent-hi); font-size:11px; letter-spacing:.08em; text-transform:uppercase; }
+  .gaud .q{ display:block; font-size:10px; color:var(--accent-hi); font-weight:600; margin-top:2px; }
   #gallery .gaud{ flex:none; height:100%; aspect-ratio:1; display:flex; align-items:center; justify-content:center; text-align:center; padding:6px; font-size:11px; background:var(--panel2); border-radius:10px; cursor:pointer; overflow:hidden; color:var(--muted); box-shadow:0 0 0 1px var(--line); }
   /* Handoff bar: send the image on screen straight into Video, Moves, Cinema or Apps */
   .handoff{ position:absolute; bottom:16px; right:16px; display:flex; gap:6px; }
@@ -430,6 +435,7 @@
         <div class="hint">Off sings the lyrics straight (clearest delivery, best for rap). Full writes a section plan and melody first. Melody plans only.</div>
         <label>Flavor (optional)</label>
         <div class="auchips" id="auloras"></div>
+        <div class="hint" id="aulorahint"></div>
         <div class="hint">YuE2 LoRAs at their authors&rsquo; default strengths. Pick one voice and one genre at most; stacking more muddies the mix.</div>
       </div>
       <div id="au-sfx" style="display:none">
@@ -1281,10 +1287,10 @@ function loadGallery(){
     const base = img ? '/images/' : aud ? '/audio/' : '/outputs/';
     GTAGS = d.tags || {};
     if(aud){
-      $('#gallery').innerHTML = (d.files||[]).map(f => { const t = GTAGS[f]; return '<div class="gitem"><div class="gaud" data-f="'+f+'" title="'+f+'">&#9835; '+(t ? t.label : f.replace(/\.mp3$/,''))+'</div>' + delBtn(f) + '</div>'; }).join('');
+      $('#gallery').innerHTML = (d.files||[]).map(f => { const t = GTAGS[f]; const q = t && t.score && t.score.overall != null ? '<span class="q">'+(+t.score.overall).toFixed(1)+'</span>' : ''; return '<div class="gitem"><div class="gaud" data-f="'+f+'" title="'+f+'">&#9835; '+(t ? t.label : f.replace(/(-master)?\.mp3$/,''))+q+'</div>' + delBtn(f) + '</div>'; }).join('');
       document.querySelectorAll('#gallery .gaud').forEach(el => el.addEventListener('click', () => {
         const t = GTAGS[el.dataset.f];
-        showAudio(base + encodeURIComponent(el.dataset.f), t ? t.label + (t.seed != null ? ' · seed ' + t.seed : '') : el.dataset.f);
+        showAudio(base + encodeURIComponent(el.dataset.f), t ? t.label + (t.seed != null ? ' · seed ' + t.seed : '') : el.dataset.f, t);
       }));
       wireDelete('audio');
       return;
@@ -1343,9 +1349,15 @@ function wireDelete(kind){
 // ---------------- Audio (Oct 20 2026) ----------------
 // Song = YuE2 (lyrics + style + optional LoRA flavors). Sound FX = Stable Audio 3 Medium.
 let AENGINE = 'song';
-function showAudio(url, meta){
-  $('#viewer').innerHTML = '<div class="audiobox"><div class="note">&#9835;</div><audio src="'+url+'" controls autoplay></audio></div>'
-    + (meta ? '<div class="meta">'+meta+'</div>' : '');
+function showAudio(url, meta, tags){
+  // tags: {lyrics, score} when known. Lyrics open in a panel over the player so you can read along.
+  const t = tags || {}, q = t.score && t.score.overall != null ? ' · quality ' + (+t.score.overall).toFixed(1) : '';
+  const lyr = (t.lyrics || '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])).replace(/^\s*(\[[^\]\n]+\])\s*$/gm, '<span class="tag">$1</span>');
+  $('#viewer').innerHTML = '<div class="audiobox"><div class="note">&#9835;</div><audio src="'+url+'" controls autoplay></audio>'
+    + (lyr ? '<div class="lyrics" id="lyrics">'+lyr+'</div>' : '') + '</div>'
+    + (meta ? '<div class="meta">'+meta+q+'</div>' : '')
+    + (lyr ? '<div class="handoff"><button id="lyrbtn">Lyrics</button></div>' : '');
+  if(lyr) $('#lyrbtn').addEventListener('click', () => { const o = $('#lyrics').classList.toggle('open'); $('#lyrbtn').textContent = o ? 'Hide lyrics' : 'Lyrics'; });
 }
 function paintAudio(){
   const song = AENGINE === 'song', len = $('#aulen');
@@ -1377,6 +1389,8 @@ function loadAudioLoras(){
 $('#auloras').addEventListener('click', e => {
   const b = e.target.closest('.ratio'); if(!b || BUSY) return;
   b.classList.toggle('active');
+  const folk = [...document.querySelectorAll('#auloras .ratio.active')].some(x => x.dataset.file.startsWith('trbdr_'));
+  $('#aulorahint').textContent = folk ? '60s folk: the style line is optional (a built-in folk style is used when blank, and the trigger word is added for you). Pick the Full plan. Male voice, often in 3/4.' : '';
 });
 $('#augen').addEventListener('click', async () => {
   $('#auerr').textContent = '';
@@ -1399,7 +1413,7 @@ $('#augen').addEventListener('click', async () => {
     const r = await fetch('/api/audio', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     const d = await r.json();
     if(!r.ok) throw new Error(d.error || 'generation failed');
-    showAudio(d.url + '?t=' + Date.now(), (d.title ? d.title + ' · ' : '') + d.seconds + ' s · seed ' + d.seed + ' · ' + d.took + 's · ' + (song ? 'YuE2' : 'Stable Audio 3'));
+    showAudio(d.url + '?t=' + Date.now(), (d.title ? d.title + ' · ' : '') + d.seconds + ' s · seed ' + d.seed + ' · ' + d.took + 's · ' + (song ? 'YuE2' + (d.mastered ? ' · mastered' : '') : 'Stable Audio 3'), song ? {lyrics: body.lyrics, score: d.score} : null);
     loadGallery();
   }catch(e){
     $('#auerr').textContent = e.message;

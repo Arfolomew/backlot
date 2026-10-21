@@ -17,6 +17,10 @@ VAE = "ltx-2.5-video-vae-bf16.safetensors"
 AUDIO_VAE = "ltx-2.5-audio-vae-bf16.safetensors"
 UPSCALER = "ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors"
 NEG = "pc game, console game, video game, cartoon, childish, ugly"
+# Audio guidance. The template ships 1.0, which leaves speech unguided: dialogue comes out as mumble.
+# At 2.0 a spoken line is intelligible (Whisper reads it back word for word) with the same weights
+# and no extra render time. Tested Oct 21 2026, research/ltx-int8-test/RESULTS.md.
+AUDIO_CFG = 2.0
 SIGMAS_1 = "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"
 SIGMAS_2 = "0.85, 0.7250, 0.4219, 0.0"
 
@@ -43,7 +47,7 @@ def build(prompt, width=1280, height=720, seconds=5.0, fps=24, seed=42, image=No
         "cond": {"class_type": "LTXVConditioning", "inputs": {
             "positive": ["pos", 0], "negative": ["negt", 0], "frame_rate": float(fps)}},
         "guider": {"class_type": "LTXVDualCFGGuider", "inputs": {
-            "model": ["unet", 0], "positive": ["cond", 0], "negative": ["cond", 1], "video_cfg": 1.0, "audio_cfg": 1.0}},
+            "model": ["unet", 0], "positive": ["cond", 0], "negative": ["cond", 1], "video_cfg": 1.0, "audio_cfg": AUDIO_CFG}},
         "sampler": {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler_ancestral"}},
         "sig1": {"class_type": "ManualSigmas", "inputs": {"sigmas": SIGMAS_1}},
         "sig2": {"class_type": "ManualSigmas", "inputs": {"sigmas": SIGMAS_2}},

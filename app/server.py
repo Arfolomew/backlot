@@ -715,8 +715,10 @@ class H(BaseHTTPRequestHandler):
             else:
                 folder, want = VIDEO_DIR, (".mp4", ".webm", ".gif")
             try:
-                files = sorted([f for f in os.listdir(folder)
-                                if f.lower().endswith(want)], reverse=True)[:60]
+                # newest first by modification time, so the thing you just made is the first
+                # thumbnail no matter which model made it (names are prefixed by kind)
+                files = sorted([f for f in os.listdir(folder) if f.lower().endswith(want)],
+                               key=lambda f: os.path.getmtime(os.path.join(folder, f)), reverse=True)[:60]
             except OSError:
                 files = []
             tags = {}

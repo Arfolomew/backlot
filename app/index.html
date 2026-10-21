@@ -117,6 +117,12 @@
   .audiobox audio{ width:70%; }
   .audiobox .note{ font-size:40px; color:var(--muted); }
   #gallery .gaud{ flex:none; height:100%; aspect-ratio:1; display:flex; align-items:center; justify-content:center; text-align:center; padding:6px; font-size:11px; background:var(--panel2); border-radius:10px; cursor:pointer; overflow:hidden; color:var(--muted); box-shadow:0 0 0 1px var(--line); }
+  /* Handoff bar: send the image on screen straight into Video, Moves, Cinema or Apps */
+  .handoff{ position:absolute; bottom:16px; right:16px; display:flex; gap:6px; }
+  .handoff button{ padding:7px 12px; border-radius:999px; border:none; cursor:pointer; font-size:12px; font-weight:600; color:var(--accent-hi);
+    background:rgba(20,20,22,.6); -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px); box-shadow:0 0 0 1px rgba(255,255,255,.08);
+    transition:background .15s var(--ease), color .15s var(--ease); }
+  .handoff button:hover{ background:var(--accent); color:#000; }
   .meta{ position:absolute; bottom:16px; left:16px; font-size:12px; color:var(--text); background:rgba(20,20,22,.6); padding:6px 11px; border-radius:999px;
     -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px); box-shadow:0 0 0 1px rgba(255,255,255,.08); }
   .spinner{ width:40px; height:40px; border:3px solid rgba(255,255,255,.1); border-top-color:var(--accent); border-radius:50%; animation:spin .9s linear infinite; margin:0 auto 14px; }
@@ -1081,7 +1087,40 @@ function showVideo(url, meta){
 }
 function showImage(url, meta){
   $('#viewer').innerHTML = '<img src="'+url+'" alt="">'
-    + (meta ? '<div class="meta">'+meta+'</div>' : '');
+    + (meta ? '<div class="meta">'+meta+'</div>' : '')
+    + '<div class="handoff">'
+    + '<button data-to="video" title="Use as the start frame in Video (Image to Video)">Animate</button>'
+    + '<button data-to="moves" title="Run a camera move on this image">Move</button>'
+    + '<button data-to="cinema" title="Start the first Cinema shot on this image">Cinema</button>'
+    + '<button data-to="apps" title="Use this image in an App">Apps</button></div>';
+  $('#viewer .handoff').addEventListener('click', e => { const b = e.target.closest('button'); if(b) handoff(url, b.dataset.to); });
+}
+// Handoff (Oct 21 2026): the app already knows which image is on screen, so no file picking.
+// Fetch it back as a data URL (the same thing the file inputs produce) and set that tab's state.
+let PENDING_IMG = null, PENDING_NAME = '';
+async function handoff(url, to){
+  if(BUSY) return;
+  const name = decodeURIComponent(url.split('/').pop().split('?')[0]);
+  let data;
+  try{ data = await readFileAsData(await (await fetch(url)).blob()); }catch(e){ fail('could not load ' + name); return; }
+  const tab = document.querySelector('#tabs .tab[data-tab="' + to + '"]');
+  if(tab && !tab.classList.contains('active')) tab.click();
+  let note = '';
+  if(to === 'video'){
+    document.querySelector('#vmode .ratio[data-mode="i2v"]').click();
+    VIMG = data; cropNote();
+    note = 'Start frame: ' + name + '. Describe the motion and press Generate Video.';
+  } else if(to === 'moves'){
+    MIMG = data; $('#mimghint').textContent = 'Starting on ' + name + ' (Image to Video).';
+    note = 'Starting on ' + name + '. Pick a move, describe the subject, press Generate.';
+  } else if(to === 'cinema'){
+    CIMG = data; $('#cimghint').textContent = 'First shot starts on ' + name + '.';
+    note = 'First shot starts on ' + name + '. Describe the scene and compose.';
+  } else if(to === 'apps'){
+    PENDING_IMG = data; PENDING_NAME = name;
+    note = name + ' is loaded. Pick an app and it is already in the Photo slot.';
+  }
+  $('#viewer').innerHTML = '<img src="' + url + '" alt=""><div class="meta">' + note + '</div>';
 }
 function fail(e){
   $('#err').textContent = e;
@@ -1349,6 +1388,14 @@ $('#appgrid').addEventListener('click', e=>{
     if(i.t === 'pick'){ AVALS[i.k] = i.def; return '<label>' + i.label + '</label><div class="ratios" data-k="' + i.k + '">' + i.opts.map(o => '<div class="ratio' + (o === i.def ? ' active' : '') + '" data-v="' + o + '">' + o.replace(' view','').replace(' shot','') + '</div>').join('') + '</div>'; }
     return '';
   }).join('');
+  const slot = APP.inputs.find(i => i.k === 'image' && i.t === 'image');
+  if(PENDING_IMG && slot){
+    AVALS.image = PENDING_IMG;
+    const inp = f.querySelector('input[data-k="image"]');
+    if(inp) inp.insertAdjacentHTML('afterend', '<div class="hint">Using ' + PENDING_NAME + ' from the viewer. Choose a file above to use a different one.</div>');
+    $('#viewer').innerHTML = '<div class="placeholder">' + APP.name + ' on ' + PENDING_NAME + ': set the options and press Run.</div>';
+    return;
+  }
   $('#viewer').innerHTML = '<div class="placeholder">' + APP.name + ': add the input and press Run.</div>';
 });
 $('#appform').addEventListener('click', e=>{

@@ -136,6 +136,9 @@
   .addref{ width:72px; height:72px; border:1px dashed var(--line); border-radius:8px; color:var(--muted); cursor:pointer;
     display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:300; background:var(--panel2); }
   .addref:hover{ border-color:var(--accent); color:var(--accent); }
+  .placeholder .pbar{width:min(360px,70%);height:6px;margin:14px auto 0;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden}
+  .placeholder .pfill{height:100%;width:0;background:var(--accent,#ff7a45);transition:width .4s ease}
+  .placeholder .ptext{margin-top:8px;font-size:12px;opacity:.75;font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -637,10 +640,13 @@ async function jfetch(url, opts){
 async function pollJob(job, url){
   localStorage.setItem('backlot.job', JSON.stringify({job, url}));
   for(;;){
-    await sleep(2000);
+    await sleep(1000);
     let r;
     try{ r = await fetch('/api/jobs/' + job); }catch(e){ continue; }   // network blip: keep waiting
-    if(r.status === 202) continue;
+    if(r.status === 202){
+      try{ const d = await r.json(); if(d.progress) setProgress(d.progress, d.elapsed); }catch(e){}
+      continue;
+    }
     localStorage.removeItem('backlot.job');
     return r;
   }
@@ -990,8 +996,26 @@ function setBusy(on, msg){
   BUSY = on;
   $('#gen').disabled = on; $('#mgen').disabled = on; $('#cgen').disabled = on; $('#agen').disabled = on; $('#augen').disabled = on; $('#upscale').disabled = on; $('#igen').disabled = on; $('#ivert').disabled = on || !ILAST; $('#iup').disabled = on || !ILAST; $('#iupload').disabled = on;
   if(on){
-    $('#viewer').innerHTML = '<div class="placeholder"><div class="spinner"></div>' + (msg||'working…') + '</div>';
+    $('#viewer').innerHTML = '<div class="placeholder"><div class="spinner"></div>' + (msg||'working…')
+      + '<div class="pbar" hidden><div class="pfill"></div></div><div class="ptext"></div></div>';
   }
+}
+// Live progress from ComfyUI (step events relayed by comfy-api-proxy -> /api/jobs/<id>).
+function setProgress(pr, elapsed){
+  const bar = $('#viewer .pbar'), fill = $('#viewer .pfill'), txt = $('#viewer .ptext');
+  if(!bar) return;
+  if(pr.queue){ txt.textContent = 'queued, ' + pr.queue + ' ahead'; return; }
+  bar.hidden = false;
+  // Follow the sampler's step count, like ComfyUI's own bar. The overall node fraction
+  // counts instant loader nodes too, so it sits near 100% while the real work runs.
+  const frac = pr.steps ? (pr.step || 0) / pr.steps : (pr.nodes_total && pr.nodes_done >= pr.nodes_total ? 1 : 0);
+  const pct = Math.round(frac * 100);
+  fill.style.width = pct + '%';
+  let t = pct + '%';
+  if(pr.steps) t += ' · step ' + pr.step + '/' + pr.steps;
+  if(pr.nodes_total) t += ' · node ' + pr.nodes_done + '/' + pr.nodes_total;
+  if(elapsed) t += ' · ' + Math.round(elapsed) + ' s';
+  txt.textContent = t;
 }
 function showVideo(url, meta){
   $('#viewer').innerHTML = '<video src="'+url+'" controls autoplay loop muted></video>'

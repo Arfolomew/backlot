@@ -92,15 +92,18 @@ class Backend:
         return graph
 
     # ---- jobs ----
-    def run(self, graph, timeout=1800, exts=(".mp4", ".webm", ".gif")):
+    def run(self, graph, timeout=1800, exts=(".mp4", ".webm", ".gif"), on_progress=None):
         """Submit an API-format graph, wait for it, return (bytes, ext) of the first output
-        whose name ends with one of ``exts``."""
+        whose name ends with one of ``exts``. ``on_progress(dict)`` is called from a helper
+        thread with the job's live progress (the proxy relays ComfyUI's step events as SSE)."""
         client = self.client()
         wf = client.workflows.from_json(self._bind_uploads(graph))
         try:
             job = client.submit(wf)
         except ComfyError as e:
             raise RuntimeError(f"{self.label} rejected the workflow: {_describe(e)}") from None
+        if on_progress:
+            threading.Thread(target=_pump_progress, args=(job, on_progress), daemon=True).start()
         try:
             job.wait(timeout=timeout)
         except TimeoutError:
@@ -143,6 +146,22 @@ class Backend:
         if before is None or after is None:
             return 0
         return max(0, before - after)
+
+
+def _pump_progress(job, on_progress):
+    """Follow a job's event stream and hand each progress frame to ``on_progress``.
+    Best effort: any failure here just leaves the UI without a bar."""
+    try:
+        from comfy_sdk.events import Progress, StatusChange
+        for ev in job.events():
+            if isinstance(ev, Progress):
+                on_progress({"value": ev.value, "step": ev.step, "steps": ev.steps,
+                             "node": ev.current_node, "nodes_done": ev.nodes_done,
+                             "nodes_total": ev.nodes_total})
+            elif isinstance(ev, StatusChange) and ev.queue_position:
+                on_progress({"value": 0.0, "queue": ev.queue_position})
+    except Exception:
+        pass
 
 
 def _describe(err):

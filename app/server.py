@@ -293,6 +293,7 @@ JOBS_LOCK = __import__("threading").Lock()
 JOB_PATHS = {"/api/video", "/api/image", "/api/audio", "/api/vertical", "/api/image-upscale",
              "/api/upscale", "/api/slowmo"}
 JOB_KEEP_SEC = 3600            # finished jobs stay fetchable this long
+JOB_CTX = __import__("threading").local()   # .jid on a job worker thread, so submit_and_wait can report progress
 
 
 def _new_job(path):
@@ -484,9 +485,16 @@ def submit_and_wait(wf, timeout=1800, exts=(".mp4", ".webm", ".gif"), base=None,
     """Submit a graph through the Comfy SDK and wait for it.
     Returns (bytes, ext, None); the third slot is kept for call-site compatibility."""
     be = backend or BACKEND
+    jid = getattr(JOB_CTX, "jid", None)
+
+    def on_progress(pr):
+        with JOBS_LOCK:
+            j = JOBS.get(jid)
+            if j and j["state"] == "running":
+                j["progress"] = pr
     ACTIVE_JOBS["n"] += 1
     try:
-        blob, ext = be.run(wf, timeout=timeout, exts=exts)
+        blob, ext = be.run(wf, timeout=timeout, exts=exts, on_progress=on_progress if jid else None)
     finally:
         ACTIVE_JOBS["n"] -= 1
     return blob, ext, None
@@ -628,7 +636,8 @@ class H(BaseHTTPRequestHandler):
                 return self._send(404, json.dumps({"error": "no such job"}))
             if j["state"] != "done":
                 return self._send(202, json.dumps({"job": jid, "state": "running",
-                                                   "elapsed": round(time.time() - j["t0"], 1)}))
+                                                   "elapsed": round(time.time() - j["t0"], 1),
+                                                   "progress": j.get("progress")}))
             return self._send(j["code"], j["body"], j["ctype"])
         if p.path == "/api/jobs":
             with JOBS_LOCK:
@@ -765,6 +774,7 @@ class H(BaseHTTPRequestHandler):
             worker._job = jid
 
             def run():
+                JOB_CTX.jid = jid
                 try:
                     worker._dispatch(p, body)
                     with JOBS_LOCK:

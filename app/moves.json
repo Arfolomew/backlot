@@ -152,8 +152,8 @@
       "strength": 0.9,
       "seconds": 5,
       "blurb": "Loose, breathing handheld energy. Documentary and action.",
-      "move": "dynamic handheld camera with slight shake and small drifting reframes following the action, energetic documentary feel",
-      "preview_subject": "street musicians playing drums on a busy market corner, crowd clapping, bright midday sun"
+      "move": "handheld camera, visibly unsteady and wobbling, the frame constantly shakes and jitters in small random bumps, nervous micro-reframes left and right and up and down, no smooth movement, no dolly, no zoom, raw documentary camera operator holding the camera",
+      "preview_subject": "a lone man in a leather jacket standing still on a rooftop at golden hour, city skyline behind him, he looks at the camera and does not move"
     },
     {
       "id": "fpv-drone",

@@ -74,8 +74,8 @@
       "lora": true,
       "strength": 1.0,
       "seconds": 5,
-      "blurb": "A smooth half circle around the subject, the camera traveling right to left. Shows the whole figure in space.",
-      "move": "slow smooth orbit around the subject from right to left, counterclockwise, camera circling at eye level on a continuous arc, subject fixed at center frame",
+      "blurb": "A smooth arc around the subject, the camera traveling to the left. Shows the whole figure in space.",
+      "move": "camera orbits to the left around the subject, the background sliding left behind it as the camera travels, smooth continuous arc at eye level",
       "preview_subject": "a ballet dancer holding a pose in an empty rehearsal studio, afternoon window light, dust in the air"
     },
     {
@@ -85,8 +85,8 @@
       "lora": true,
       "strength": 1.0,
       "seconds": 5,
-      "blurb": "The same half circle, the camera traveling left to right.",
-      "move": "slow smooth orbit around the subject from left to right, clockwise, camera circling at eye level on a continuous arc, subject fixed at center frame",
+      "blurb": "The same arc, the camera traveling to the right.",
+      "move": "camera orbits to the right around the subject, the background sliding right behind it as the camera travels, smooth continuous arc at eye level",
       "preview_subject": "a vintage red motorcycle parked on a wet cobblestone street at night, shop signs reflecting"
     },
     {

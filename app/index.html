@@ -200,6 +200,63 @@
   .placeholder .pbar{ width:min(360px,70%); height:6px; margin:16px auto 0; border-radius:999px; background:rgba(255,255,255,.1); overflow:hidden; }
   .placeholder .pfill{ height:100%; width:0; border-radius:999px; background:linear-gradient(90deg,var(--accent),var(--accent-hi)); transition:width .4s var(--ease); }
   .placeholder .ptext{ margin-top:9px; font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+
+  /* ---- Polish pass, Oct 21 2026: sleeker, more air, Apple-grade controls ---- */
+  .stage{ background:radial-gradient(120% 90% at 50% 40%, #121214 0%, #0a0a0b 55%, #000 100%); }
+  .controls{ padding:22px 22px 28px; background:linear-gradient(180deg,#0d0d0f,#0a0a0c); box-shadow:inset -1px 0 0 rgba(255,255,255,.04); }
+  /* grouped-list feel: every section after the first starts with a hairline and a small tracked caption */
+  label{ font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:22px 0 8px; padding-top:14px; border-top:1px solid var(--line); font-weight:600; }
+  label.first{ margin-top:0; padding-top:0; border-top:none; }
+  label .browse, label .val, label .hint{ text-transform:none; letter-spacing:0; }   /* inline readouts keep their own case */
+  label .val{ font-size:12px; }
+  .hint{ font-size:11.5px; color:#6e6e73; line-height:1.45; }
+  .err{ padding:8px 10px; border-radius:8px; background:rgba(255,69,58,.1); }
+  .err:empty{ display:none; }
+  /* header: a hairline of orange light along the bottom edge */
+  header{ min-height:58px; }
+  header::after{ content:""; position:absolute; left:0; right:0; bottom:-1px; height:1px; background:linear-gradient(90deg, transparent 0%, rgba(240,104,40,.55) 18%, rgba(240,104,40,.55) 40%, transparent 70%); pointer-events:none; }
+  .logo{ font-size:14px; letter-spacing:.26em; }
+  .status{ padding:5px 11px 5px 8px; border-radius:999px; background:rgba(255,255,255,.05); box-shadow:inset 0 0 0 1px rgba(255,255,255,.05); font-size:11.5px; }
+  /* tab glyphs, masked in currentColor so they recolor with the pill */
+  .tab{ display:flex; align-items:center; gap:7px; padding:6px 14px 6px 12px; }
+  .tab::before{ content:""; width:13px; height:13px; background:currentColor; -webkit-mask:var(--ico) center/contain no-repeat; mask:var(--ico) center/contain no-repeat; opacity:.9; }
+  .tab[data-tab="video"]{ --ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 5h11a2 2 0 0 1 2 2v2.5l4-2.5v10l-4-2.5V17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z'/%3E%3C/svg%3E"); }
+  .tab[data-tab="image"]{ --ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 3h16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm0 13l5-5 4 4 3-3 4 4V5H4v11zm12-9a2 2 0 1 1 0 4 2 2 0 0 1 0-4z'/%3E%3C/svg%3E"); }
+  .tab[data-tab="moves"]{ --ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3a9 9 0 0 1 8.5 6h-3.2A6 6 0 0 0 6 12H3a9 9 0 0 1 9-9zm9 9a9 9 0 0 1-9 9 9 9 0 0 1-8.5-6h3.2A6 6 0 0 0 18 12h3zM3 3l3 4H3zm18 18l-3-4h3z'/%3E%3C/svg%3E"); }
+  .tab[data-tab="cinema"]{ --ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 10h18v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9zm.4-2.2l17.3-4.6 1 3.9L4.4 11.7l-1-3.9zm3.3-.9l3.4-.9-1.6-2.3-3.4.9 1.6 2.3zm5.6-1.5l3.4-.9-1.6-2.3-3.4.9 1.6 2.3z'/%3E%3C/svg%3E"); }
+  .tab[data-tab="apps"]{ --ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z' rx='1'/%3E%3C/svg%3E"); }
+  .tab[data-tab="audio"]{ --ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 10h2v4H3zm4-4h2v12H7zm4 2h2v8h-2zm4-5h2v18h-2zm4 6h2v6h-2z'/%3E%3C/svg%3E"); }
+  /* sliders: thin track, white thumb with an orange ring */
+  input[type=range]{ -webkit-appearance:none; appearance:none; height:22px; background:transparent; }
+  input[type=range]::-webkit-slider-runnable-track{ height:4px; border-radius:999px; background:rgba(255,255,255,.14); }
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:18px; height:18px; margin-top:-7px; border-radius:50%; background:#fff; box-shadow:0 0 0 2px var(--accent), 0 2px 6px rgba(0,0,0,.6); cursor:pointer; transition:transform .15s var(--ease); }
+  input[type=range]::-webkit-slider-thumb:hover{ transform:scale(1.1); }
+  input[type=range]::-moz-range-track{ height:4px; border-radius:999px; background:rgba(255,255,255,.14); }
+  input[type=range]::-moz-range-thumb{ width:18px; height:18px; border:none; border-radius:50%; background:#fff; box-shadow:0 0 0 2px var(--accent), 0 2px 6px rgba(0,0,0,.6); }
+  /* checkboxes become toggles */
+  .chk{ gap:10px; margin-top:12px; }
+  .chk label{ text-transform:none; letter-spacing:0; border:none; padding:0; margin:0; font-size:12.5px; font-weight:500; color:var(--text); cursor:pointer; }
+  .chk input[type=checkbox]{ -webkit-appearance:none; appearance:none; width:34px; height:20px; border-radius:999px; background:rgba(255,255,255,.14); position:relative; cursor:pointer; flex:none; transition:background .2s var(--ease); margin:0; }
+  .chk input[type=checkbox]::after{ content:""; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.5); transition:transform .2s var(--ease); }
+  .chk input[type=checkbox]:checked{ background:var(--accent); }
+  .chk input[type=checkbox]:checked::after{ transform:translateX(14px); }
+  .chk input[type=checkbox]:focus-visible{ outline:2px solid var(--accent-ring); outline-offset:2px; }
+  /* file inputs */
+  input[type=file]{ width:100%; font-size:12px; color:var(--muted); }
+  input[type=file]::file-selector-button{ margin-right:10px; padding:7px 12px; border:none; border-radius:999px; background:rgba(255,255,255,.08); color:var(--text); font:inherit; font-size:12px; font-weight:600; cursor:pointer; transition:background .15s var(--ease); }
+  input[type=file]::file-selector-button:hover{ background:rgba(255,255,255,.14); }
+  /* panels fade in when you switch tabs */
+  @keyframes panelIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:none; } }
+  [id$="-panel"]{ animation:panelIn .28s var(--ease); }
+  /* viewer media: soft edge glow; gallery strip fades at both ends */
+  .viewer video,.viewer img{ box-shadow:0 0 0 1px rgba(255,255,255,.06), 0 30px 90px rgba(0,0,0,.75), 0 0 120px rgba(240,104,40,.06); }
+  .gallery{ padding:12px 16px; gap:10px; -webkit-mask-image:linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%); mask-image:linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%); }
+  .gallery video:hover,.gallery img:hover{ transform:translateY(-2px) scale(1.03); }
+  /* primary button: a touch larger, letterspaced */
+  .placeholder.empty{ display:flex; flex-direction:column; align-items:center; gap:14px; color:#5a5a5f; }
+  .placeholder.empty::before{ content:""; width:56px; height:56px; border-radius:14px; background:url(/favicon.ico) center/contain no-repeat; opacity:.28; filter:saturate(.8); }
+  .gen{ padding:15px; font-size:15px; border-radius:14px; }
+  .ratio{ padding:10px 0; }
 </style>
 </head>
 <body>
@@ -676,7 +733,7 @@
 
     <div class="stage">
       <div class="viewer" id="viewer">
-        <div class="placeholder" id="ph">Nothing generated yet.</div>
+        <div class="placeholder empty" id="ph">Nothing generated yet.</div>
       </div>
       <div class="gallery" id="gallery"></div>
     </div>
@@ -1570,7 +1627,7 @@ $('#tabs').addEventListener('click', e=>{
   if(TAB === 'apps' && !$('#appgrid').children.length) paintApps();
   if(TAB === 'cinema' && !CINEMA) loadCinema();
   if(TAB === 'moves' && !MOVES.length) loadMoves();
-  $('#viewer').innerHTML = '<div class="placeholder">Nothing generated yet.</div>';
+  $('#viewer').innerHTML = '<div class="placeholder empty">Nothing generated yet.</div>';
   if(TAB === 'cinema') $('#viewer').innerHTML = '<video src="/previews/cinema/epic-samurai-dynamic.mp4" poster="/previews/cinema/epic-samurai-dynamic.jpg" controls autoplay loop muted></video><div class="meta">sample &middot; Dynamic pacing, Epic, contre-jour, 35mm anamorphic f/4 &middot; one 8 s render, 7 shots, cuts at 1.2, 3.0, 3.8, 4.9, 5.6 and 6.4 s</div>';
   loadGallery();
   freeVram();

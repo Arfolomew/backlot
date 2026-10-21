@@ -44,6 +44,26 @@
   .gallery video,.gallery img{ height:80px; width:80px; object-fit:cover; border-radius:10px; cursor:pointer; flex:0 0 auto; background:#000;
     box-shadow:0 0 0 1px var(--line); transition:box-shadow .18s var(--ease), transform .18s var(--ease); }
   .gallery video:hover,.gallery img:hover{ box-shadow:0 0 0 1.5px var(--accent); transform:translateY(-1px); }
+  /* Each creation sits in a .gitem so the delete x can ride its top-right corner */
+  .gitem{ position:relative; flex:0 0 auto; height:80px; }
+  .gitem .gaud{ height:80px; width:80px; }
+  .gdel{ position:absolute; top:-6px; right:-6px; width:20px; height:20px; border-radius:50%; border:none; cursor:pointer; z-index:1;
+    background:rgba(28,28,30,.92); color:var(--text); font-size:13px; line-height:20px; text-align:center; padding:0;
+    box-shadow:0 0 0 1px var(--line2), 0 2px 6px rgba(0,0,0,.6); opacity:0; transform:scale(.8); transition:opacity .15s var(--ease), transform .15s var(--ease), background .15s var(--ease), color .15s var(--ease); }
+  .gitem:hover .gdel{ opacity:1; transform:scale(1); }
+  .gdel:hover{ background:var(--bad); color:#fff; }
+  /* Confirm dialog, Apple alert style */
+  dialog.confirm{ margin:auto; border:none; border-radius:var(--r-lg); padding:0; background:transparent; color:var(--text); }   /* margin:auto: the * reset would otherwise pin it top-left */
+  dialog.confirm button:focus{ outline:none; } dialog.confirm button:focus-visible{ outline:2px solid var(--accent-ring); outline-offset:2px; }
+  dialog.confirm::backdrop{ background:rgba(0,0,0,.55); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); }
+  dialog.confirm .box{ width:300px; padding:22px 20px 16px; border-radius:var(--r-lg); background:rgba(28,28,30,.92); -webkit-backdrop-filter:saturate(180%) blur(24px); backdrop-filter:saturate(180%) blur(24px);
+    box-shadow:0 0 0 1px rgba(255,255,255,.1), 0 30px 80px rgba(0,0,0,.7); text-align:center; }
+  dialog.confirm .ttl{ font-size:15px; font-weight:600; letter-spacing:-.01em; }
+  dialog.confirm .sub{ font-size:12px; color:var(--muted); margin-top:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  dialog.confirm .btns{ display:flex; gap:8px; margin-top:18px; }
+  dialog.confirm button{ flex:1; padding:10px; border-radius:10px; border:none; cursor:pointer; font-weight:600; font-size:13px; transition:filter .15s var(--ease), background .15s var(--ease); }
+  dialog.confirm .cancel{ background:rgba(255,255,255,.08); color:var(--text); } dialog.confirm .cancel:hover{ background:rgba(255,255,255,.14); }
+  dialog.confirm .ok{ background:var(--bad); color:#fff; } dialog.confirm .ok:hover{ filter:brightness(1.1); }
 
   /* Segmented control for the top-level tabs */
   .tabs{ display:flex; gap:2px; margin-left:16px; padding:3px; border-radius:999px; background:rgba(255,255,255,.06); box-shadow:inset 0 0 0 1px rgba(255,255,255,.04); }
@@ -1162,17 +1182,19 @@ function loadGallery(){
     const base = img ? '/images/' : aud ? '/audio/' : '/outputs/';
     GTAGS = d.tags || {};
     if(aud){
-      $('#gallery').innerHTML = (d.files||[]).map(f => { const t = GTAGS[f]; return '<div class="gaud" data-f="'+f+'" title="'+f+'">&#9835; '+(t ? t.label : f.replace(/\.mp3$/,''))+'</div>'; }).join('');
+      $('#gallery').innerHTML = (d.files||[]).map(f => { const t = GTAGS[f]; return '<div class="gitem"><div class="gaud" data-f="'+f+'" title="'+f+'">&#9835; '+(t ? t.label : f.replace(/\.mp3$/,''))+'</div>' + delBtn(f) + '</div>'; }).join('');
       document.querySelectorAll('#gallery .gaud').forEach(el => el.addEventListener('click', () => {
         const t = GTAGS[el.dataset.f];
         showAudio(base + encodeURIComponent(el.dataset.f), t ? t.label + (t.seed != null ? ' · seed ' + t.seed : '') : el.dataset.f);
       }));
+      wireDelete('audio');
       return;
     }
-    $('#gallery').innerHTML = (d.files||[]).map(f => { const t = GTAGS[f]; const tt = (t ? t.label + ' · ' : '') + f; return img
+    $('#gallery').innerHTML = (d.files||[]).map(f => { const t = GTAGS[f]; const tt = (t ? t.label + ' · ' : '') + f; return '<div class="gitem">' + (img
       ? '<img src="'+base+encodeURIComponent(f)+'" loading="lazy" title="'+tt+'" alt="">'
-      : '<video src="'+base+encodeURIComponent(f)+'" muted preload="metadata" title="'+tt+'"></video>'; }
+      : '<video src="'+base+encodeURIComponent(f)+'" muted preload="metadata" title="'+tt+'"></video>') + delBtn(f) + '</div>'; }
     ).join('');
+    wireDelete(img ? 'image' : 'video');
     document.querySelectorAll('#gallery video, #gallery img').forEach(v=>{
       v.addEventListener('click', ()=>{
         const name = decodeURIComponent(v.src.split('/').pop());
@@ -1190,6 +1212,34 @@ function loadGallery(){
   }).catch(()=>{});
 }
 loadGallery();
+
+// Delete a creation from the strip and from its folder on disk, after a confirm.
+function delBtn(f){ return '<button class="gdel" data-f="'+f.replace(/"/g,'&quot;')+'" title="Delete">&times;</button>'; }
+function confirmDelete(name){
+  return new Promise(res => {
+    const dlg = $('#confirm'); $('#confirm-name').textContent = name;
+    dlg.returnValue = 'cancel';
+    dlg.addEventListener('close', () => res(dlg.returnValue === 'ok'), {once:true});
+    dlg.showModal();
+  });
+}
+function wireDelete(kind){
+  document.querySelectorAll('#gallery .gdel').forEach(b => b.addEventListener('click', async ev => {
+    ev.stopPropagation();
+    const name = b.dataset.f;
+    if(!(await confirmDelete(name))) return;
+    try{
+      const r = await fetch('/api/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({kind, name})});
+      const d = await r.json();
+      if(!r.ok) throw new Error(d.error || 'delete failed');
+      b.closest('.gitem').remove();
+      if(name === LAST || name === ILAST){
+        if(name === LAST) LAST = null; else ILAST = null;
+        $('#viewer').innerHTML = '<div class="placeholder">Deleted.</div>';
+      }
+    }catch(e){ alert(e.message); }
+  }));
+}
 
 // ---------------- Audio (Oct 20 2026) ----------------
 // Song = YuE2 (lyrics + style + optional LoRA flavors). Sound FX = Stable Audio 3 Medium.
@@ -1829,5 +1879,12 @@ async function runAngles(){
   if(done < list.length) $('#ierr').textContent = (list.length - done) + ' of ' + list.length + ' angles failed.';
 }
 </script>
+<dialog class="confirm" id="confirm">
+  <form method="dialog" class="box">
+    <div class="ttl">Are you sure you want to delete this creation?</div>
+    <div class="sub" id="confirm-name"></div>
+    <div class="btns"><button value="cancel" class="cancel" type="submit">Cancel</button><button value="ok" class="ok" type="submit">Confirm</button></div>
+  </form>
+</dialog>
 </body>
 </html>

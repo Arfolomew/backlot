@@ -797,6 +797,28 @@ class H(BaseHTTPRequestHandler):
 
     def _dispatch(self, p, body):
         self._body = body if isinstance(body, dict) else {}
+        if p.path == "/api/delete":
+            # Remove one creation (and its tag file) from the gallery folder it lives in.
+            # The name is a bare file name inside the kind's folder; anything else is refused.
+            kind = str(body.get("kind") or "")
+            name = os.path.basename(str(body.get("name") or ""))
+            folders = {"video": (VIDEO_DIR, (".mp4", ".webm", ".gif")), "image": (IMAGE_DIR, (".png", ".jpg", ".jpeg", ".webp")),
+                       "audio": (AUDIO_DIR, (".mp3", ".wav"))}
+            if kind not in folders or not name or name != str(body.get("name")) or name.startswith("."):
+                return self._send(400, json.dumps({"error": "bad kind or name"}))
+            folder, want = folders[kind]
+            path = os.path.join(folder, name)
+            if not name.lower().endswith(want) or not os.path.isfile(path):
+                return self._send(404, json.dumps({"error": "no such creation"}))
+            try:
+                os.remove(path)
+            except OSError as e:
+                return self._send(500, json.dumps({"error": f"could not delete: {e}"}))
+            try:
+                os.remove(os.path.join(META_DIR, name + ".json"))
+            except OSError:
+                pass
+            return self._send(200, json.dumps({"ok": True, "deleted": name}))
         if p.path == "/api/cinema/compose":
             try:
                 if not str(body.get("scene") or "").strip() and not any(str(x).strip() for x in (body.get("shots") or [])):

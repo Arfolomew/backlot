@@ -384,7 +384,7 @@
       <div class="hint">Direct the look with pickers, describe the scene once, pick a pacing. Backlot writes the multi-shot prompt in H3's own format (shots, cut times, camera moves) and renders it as ONE clip, so the subject stays consistent across cuts.</div>
 
       <label>Scene</label>
-      <textarea id="cscene" placeholder="Who, what, where. Example: a lighthouse keeper in a wool coat climbs the spiral stairs with a lantern, wind outside, the lamp room glowing above"></textarea>
+      <textarea id="cscene" placeholder="Who, what, where. Example: a samurai in crimson armor draws a katana on a sea cliff at dawn, cherry petals streaming past, a fleet of red-sailed junks on the swells below"></textarea>
 
       <label>Genre</label><div class="pickrow" id="cgenre"></div>
       <label>Era</label><div class="pickrow" id="cera"></div>
@@ -1524,7 +1524,7 @@ $('#tabs').addEventListener('click', e=>{
   if(TAB === 'cinema' && !CINEMA) loadCinema();
   if(TAB === 'moves' && !MOVES.length) loadMoves();
   $('#viewer').innerHTML = '<div class="placeholder">Nothing generated yet.</div>';
-  if(TAB === 'cinema') $('#viewer').innerHTML = '<video src="/previews/cinema/calm-lighthouse-1960s.mp4" controls autoplay loop muted></video><div class="meta">sample &middot; Calm pacing, Drama, 1960s, practicals, 35mm anamorphic f/1.4 &middot; one 8 s render, cuts at 2.3 s and 5.3 s</div>';
+  if(TAB === 'cinema') $('#viewer').innerHTML = '<video src="/previews/cinema/epic-samurai-dynamic.mp4" poster="/previews/cinema/epic-samurai-dynamic.jpg" controls autoplay loop muted></video><div class="meta">sample &middot; Dynamic pacing, Epic, contre-jour, 35mm anamorphic f/4 &middot; one 8 s render, 7 shots, cuts at 1.2, 3.0, 3.8, 4.9, 5.6 and 6.4 s</div>';
   loadGallery();
   freeVram();
 });

@@ -520,7 +520,7 @@
         </div>
         <div class="hint" id="iang-count"></div>
       </div>
-      <div id="imoss-note" style="display:none" class="hint"><b>MOSS-Image</b> (25 steps, about 16 s). The one model here that spells:
+      <div id="imoss-note" style="display:none" class="hint"><b>MOSS-Image</b> (40 steps, about 45 s at 2 MP). The one model here that spells:
         every prompted word correct in our tests, including a five-line price list and a URL. Put the words you want
         in quotes in <b>Text</b> mode, or use <b>Layout</b> for a poster, menu, business card or book page with each block where you put it.
         Say &ldquo;no visible text&rdquo; when you want none: left alone it invents lettering on signs and windows. Photoreal is good but
@@ -1576,7 +1576,7 @@ function paintModel(){
     x.style.display = ok ? '' : 'none';
   });
   $('#imodelhint').innerHTML = mossOn
-    ? 'MOSS-Image, INT8, local. 25 steps, CFG 2.5, built for rendering real words.'
+    ? 'MOSS-Image, INT8, local. 40 steps, CFG 2.5, built for rendering real words.'
     : qwen
     ? 'Qwen Image 2.1 + turbo LoRA, INT8, local. 8 steps, no negative prompt.'
     : KREA_HINT;

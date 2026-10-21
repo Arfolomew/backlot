@@ -67,9 +67,9 @@ MOSS_UNET = "moss_image_sft_int8_convrot.safetensors"
 MOSS_TE = "qwen3.5_9b_w4a8_gptq.safetensors"
 MOSS_VAE = "flux2-vae_small.safetensors"
 MOSS_NEG = "nsfw, worst quality, bad anatomy, watermark, jpeg artifact"
-MOSS_STEPS = 25
+MOSS_STEPS = 40                  # Jake, Oct 20: 40 steps looked much better than 25
 MOSS_CFG = 2.5
-MOSS_MAX_PIXELS = 1_500_000      # tested up to 1.44 MP on 16 GB; 2 MP is untested
+MOSS_MAX_PIXELS = 2_000_000      # raised Oct 20 (Jake): 1152x1728 posters render at full size on 16 GB
 QWEN21_STEPS = 8
 QWEN21_MAX_REFS = 10
 # ORB360 360-orbit LoRA (MatlowAI, Ref2VA). Prompts = the author's captions, in prompts/.
@@ -1186,7 +1186,7 @@ class H(BaseHTTPRequestHandler):
                 seed = int(body.get("seed", -1))
                 if seed < 0:
                     seed = int.from_bytes(os.urandom(4), "big")
-                steps = max(15, min(35, int(body.get("steps", MOSS_STEPS))))
+                steps = max(15, min(50, int(body.get("steps", MOSS_STEPS))))
                 width, height = int(body.get("width", 1024)), int(body.get("height", 1408))
                 if width * height > MOSS_MAX_PIXELS:
                     k = (MOSS_MAX_PIXELS / (width * height)) ** 0.5

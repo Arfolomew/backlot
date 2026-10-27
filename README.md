@@ -63,8 +63,9 @@ single clip with the same subject across every cut. The prompt is shown before y
 can edit it.
 
 **Apps.** One input, one job: Angles (re-shoot a photo from 96 camera positions), Relight, Cutout
-(real RGBA), 4K Upscale, 360 Orbit, and Character Swap (put a new face, hair and outfit on the
-person in a clip; motion, lip sync and sound stay).
+(real RGBA), 4K Upscale, 360 Orbit, and Character Swap (put a new face, hair and outfit on one
+person in a clip. SAM 3.1 masks that person and only they are regenerated, so the crowd, the framing,
+motion, lip sync and sound stay; akatz's H3 Character Swap graph).
 
 ## What this costs elsewhere
 
@@ -79,11 +80,13 @@ no clip cap, no queue, and nothing leaving the machine.
 - A ComfyUI install (0.35 or newer; **0.38 or newer for Qwen Image 2.1**, **0.42 or newer for MOSS-Image**; YuE2 and Stable Audio 3 nodes are core since 0.38; LTX-2.5 nodes are core in 0.42; everything here was last run on 0.42.1) with these node packs in `custom_nodes/`:
   - [city96/ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF)
   - [kijai/ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes)
-  - [jlucasmcrell/ComfyUI-H3-Multishot](https://github.com/jlucasmcrell/ComfyUI-H3-Multishot)
+  - [Arfolomew/ComfyUI-H3-Multishot](https://github.com/Arfolomew/ComfyUI-H3-Multishot), our fork of
+    jlucasmcrell/ComfyUI-H3-Multishot with a one-line fix that Character Swap needs (audio guide + reference audio in one graph)
   - [NikoDemon80/ComfyUI-H3-Motion-Context](https://github.com/NikoDemon80/ComfyUI-H3-Motion-Context)
   - [Fannovel16/ComfyUI-Frame-Interpolation](https://github.com/Fannovel16/ComfyUI-Frame-Interpolation)
   - [numz/ComfyUI-SeedVR2_VideoUpscaler](https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler)
   - [lbouaraba/comfyui-krea2edit](https://github.com/lbouaraba/comfyui-krea2edit) (identity edit only)
+  - [akatz-ai/h3-relay](https://github.com/akatz-ai/h3-relay) at `8c313cc` (Character Swap only)
 
   `setup/install-nodes.sh /path/to/ComfyUI` clones all of them.
 - An NVIDIA GPU with 16 GB VRAM. Everything here was measured on an RTX 4070 Ti SUPER (16 GB).

@@ -1442,9 +1442,9 @@ const APPS = [
   {id:'orbit', name:'360 Orbit', time:'~12 min', blurb:'One photo becomes a full turntable clip that loops (ORB360 LoRA). Three photos (front, 120°, 240°) give a clean back side.',
    inputs:[{k:'images',t:'images',label:'1 or 3 photos'}],
    run:v=>({url:'/api/video', body:{mode:'orbit', images:v.images, width:1152, height:768, prompt:''}, kind:'video'})},
-  {id:'charswap', name:'Character Swap', time:'~20 min / 5 s', blurb:'Put a new face, hair and outfit on the person in a clip. Motion, lip sync and sound stay (akatz Character Swap V1.5).',
-   inputs:[{k:'video',t:'video',label:'Source clip (up to 10 s)'},{k:'image',t:'image',label:'Character photo'},{k:'subject',t:'text',label:'Who to replace',def:'the person'}],
-   run:v=>({url:'/api/video', body:{mode:'swap', video:v.video, image:v.image, subject:v.subject, width:1344, height:768}, kind:'video'})},
+  {id:'charswap', name:'Character Swap', time:'~20 min / 5 s', blurb:'Put a new face, hair and outfit on one person in a clip. Only that person changes: the crowd, the framing, motion and sound stay (SAM mask + akatz Character Swap V1.5).',
+   inputs:[{k:'video',t:'video',label:'Source clip (up to 10 s, one continuous shot)'},{k:'image',t:'image',label:'Character photo'},{k:'description',t:'text',label:'Describe the character (face, hair, clothes)',def:''},{k:'selection',t:'pick',label:'Which person',opts:['largest','leftmost','rightmost'],def:'largest'}],
+   run:v=>({url:'/api/video', body:{mode:'swap', video:v.video, image:v.image, description:v.description, selection:v.selection}, kind:'video'})},
 ];
 let APP = null, AVALS = {};
 function paintApps(){

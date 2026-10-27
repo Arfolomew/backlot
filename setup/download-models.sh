@@ -37,6 +37,8 @@ if [ "$ALL" = "--all" ]; then
   get Jojocodex/minimax-h3-Camera-Motion-lora camera_motion_h3_lora_v1_3000_pruned.safetensors loras
   get MATLOWAI/MiniMax-H3-ORB360-CardSpin     minimax_h3_orb360_step1500.safetensors            loras/h3-tier2
   get akatz-ai/MiniMax-H3-Character-Swap-LoRA h3_character_swap_v1.5.safetensors            loras
+  get Comfy-Org/sam3.1                        checkpoints/sam3.1_multiplex_fp16.safetensors     checkpoints
+  get lightx2v/Minimax-h3-Turbo               minimax_h3_fl2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors loras
   get Comfy-Org/Krea-2                        loras/krea2_style_reference.safetensors           loras
   get conradlocke/krea2-identity-edit         krea2_identity_edit_v1_2.safetensors              loras
   get unsloth/Qwen-Image-Edit-2511-GGUF       qwen-image-edit-2511-Q4_K_M.gguf                  unet

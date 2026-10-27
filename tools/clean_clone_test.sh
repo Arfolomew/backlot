@@ -22,6 +22,22 @@ n=$(ls app/previews/moves/*.mp4 2>/dev/null | wc -l); [ "$n" = 30 ] && ok "30 pr
 [ -f app/previews/cinema/calm-lighthouse-1960s.mp4 ] && ok "cinema sample shipped" || bad "cinema sample"
 bash -n setup/download-models.sh && ok "download-models.sh parses" || bad "download-models.sh"
 grep -q h3_character_swap_v1.5 setup/download-models.sh docs/models.md && ok "swap LoRA documented" || bad "swap LoRA docs"
+grep -q Arfolomew/ComfyUI-H3-Multishot setup/install-nodes.sh && grep -q akatz-ai/h3-relay setup/install-nodes.sh && ok "swap node packs in installer" || bad "swap node packs"
+# Character Swap graph: every node class and model file it names must exist on the backend (no GPU)
+.venv/bin/python - "$COMFY" <<'EOF2' && ok "swap graph resolves on the backend" || bad "swap graph"
+import json,sys,urllib.request
+sys.path.insert(0,"app")
+from workflows.build_relay_swap_workflow import build, prompt_for
+wf=build("src.mp4","char.png",prompt_for("a test"),seconds=5.0)
+oi=json.load(urllib.request.urlopen(sys.argv[1]+"/object_info"))
+missing=[n["class_type"] for n in wf.values() if n["class_type"] not in oi]
+for n in wf.values():
+    spec=oi.get(n["class_type"],{}).get("input",{}).get("required",{})
+    for k,v in n["inputs"].items():
+        if isinstance(v,str) and v.endswith((".safetensors",".gguf")) and isinstance(spec.get(k,[None])[0],list) and v not in spec[k][0]:
+            missing.append(v)
+print("   missing:",missing or "none"); sys.exit(1 if missing else 0)
+EOF2
 
 fuser -k $PORT/tcp >/dev/null 2>&1
 PORT=$PORT BACKLOT_COMFY_URL=$PROXY BACKLOT_COMFYUI_URL=$COMFY BACKLOT_QWEN_URL=$QPROXY BACKLOT_QWEN_COMFYUI_URL=$QCOMFY \
@@ -33,7 +49,8 @@ curl -s localhost:$PORT/api/cinema | grep -q '"pacing"' && ok "/api/cinema" || b
 curl -s -X POST localhost:$PORT/api/cinema/compose -H 'Content-Type: application/json' -d '{"scene":"a cat on a windowsill","pacing":"calm","seconds":6}' | grep -q '\[Shot 3\]' && ok "cinema compose -> 3 shots" || bad "cinema compose"
 curl -s -o /dev/null -w '%{http_code}' localhost:$PORT/previews/moves/push-in.mp4 | grep -q 200 && ok "preview served" || bad "preview route"
 curl -s -o /dev/null -w '%{http_code}' localhost:$PORT/ | grep -q 200 && ok "index served" || bad "index"
-# one real GPU job through the SDK path: SeedVR2 2x on a shipped poster (~10 s)
+# one real GPU job through the SDK path: SeedVR2 2x on a shipped poster (~10 s). SKIP_GPU=1 skips it.
+if [ "${SKIP_GPU:-0}" = 1 ]; then echo "SKIP  image upscale job (SKIP_GPU=1)"; else
 python3 - $PORT <<'EOF' && ok "image upscale job through the SDK" || bad "image upscale job"
 import base64,json,sys,time,urllib.request
 port=sys.argv[1]
@@ -49,5 +66,6 @@ while time.time()-t0<600:
     except urllib.error.HTTPError as e: print("   ", e.code, e.read().decode()[:200]); sys.exit(1)
 sys.exit(1)
 EOF
+fi
 fuser -k $PORT/tcp >/dev/null 2>&1
 echo; echo "clone dir kept at $DIR (delete when done)"; [ $fails = 0 ] && echo "ALL PASS" || echo "$fails FAILED"; exit $fails

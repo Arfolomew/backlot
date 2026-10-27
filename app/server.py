@@ -32,6 +32,7 @@ from workflows.build_postfx_workflow import build as build_postfx    # noqa: E40
 from workflows.build_krea_workflow import build as build_krea        # noqa: E402
 from workflows.build_ltx25_workflow import build as build_ltx25      # noqa: E402
 from workflows.build_seedvr2_video_workflow import build as build_seedvr2_video   # noqa: E402
+from workflows.build_relay_swap_workflow import build as build_relay_swap, prompt_for as relay_swap_prompt   # noqa: E402
 from comfy_backend import Backend, gpu_used_mib   # noqa: E402
 
 # ---- configuration (environment) ----
@@ -201,11 +202,10 @@ for _d in (VIDEO_DIR, IMAGE_DIR, TMP_DIR):
 with open(os.path.join(HERE, "moves.json")) as _f:
     MOVES = {m["id"]: m for m in json.load(_f)["moves"]}
 PREVIEW_DIR = os.path.join(HERE, "previews")
-# Character Swap (akatz-ai H3 Character Swap LoRA V1.5, Oct 17 2026 A/B winner over Viggle):
-# Ref2VA graph + swap LoRA 1.0 + the ref2v turbo, 8 steps, er_sde / normal. Source clip = <Video 1>
-# (its soundtrack rides along), character = <Picture 1>. ~22 min per 5 s clip on a 16 GB card, most
-# of it the 32B text encoder reading the source video.
-SWAP_LORA = "h3_character_swap_v1.5.safetensors"
+# Character Swap (Oct 26 2026: masked swap, Jake's default after the viking crowd A/B). akatz's full
+# graph: SAM 3.1 masks one person and only that person is regenerated; bystanders and framing stay
+# the source's. Builder: workflows/build_relay_swap_workflow.py. ~20 min per 5 s on a 16 GB card.
+# (Before: swap LoRA on the plain Ref2VA graph, which re-generated the whole frame and re-cast crowds.)
 SWAP_MAX_SECONDS = 10.0
 
 # Cinema Studio (Oct 20 2026): pickers -> one H3 prompt in the model's own three-field,
@@ -1080,28 +1080,13 @@ class H(BaseHTTPRequestHandler):
                     finally:
                         cleanup_local(tmp)
                     seconds = max(2.0, min(SWAP_MAX_SECONDS, src_seconds))
-                    who = (body.get("subject") or "the person").strip()
-                    prompt = (f"subject_definitions:\n<Subject 1> is the character in <Picture 1>: keep this face, "
-                              f"hair, skin and clothing exactly.\n<Subject 2> is the performance in <Video 1>: every movement, "
-                              f"gesture, camera move, timing and the spoken audio.\n\nsummary:\nReplace {who} in <Video 1> with "
-                              f"<Subject 1>, keeping <Subject 2> unchanged.\n\nretention_analysis:\n<Subject 2> is fully preserved: "
-                              f"framing, camera motion, body movement, lip movement and the soundtrack carry over unaltered. "
-                              f"<Subject 1> replaces the face, hair and clothing of {who} and nothing else changes.\n\n"
-                              f"detailed_description:\n[Shot 1] The same shot as <Video 1> from first frame to last, with "
-                              f"<Subject 1> in place of {who}, matching every pose and expression in sync with the original.\n\n"
-                              f"overall_soundscape:\nIdentical to <Video 1>.\n\nnon_diegetic_music:\nN/A")
-                    wf, frames = build_ref2va(
-                        prompt, ref_images=[iname], width=width, height=height,
-                        seconds=seconds, steps=H3_STEPS, seed=seed, scheduler="normal",
-                        low_vram_chunks=H3_HEAD_CHUNKS, fps=H3_FPS, clip_cpu=True,
-                        prefix="video/BacklotSwap", extra_loras=((SWAP_LORA, 1.0),))
-                    wf["9"]["inputs"]["sampler_name"] = "er_sde"
-                    wf["60"] = {"class_type": "LoadVideo", "inputs": {"file": vname}}
-                    wf["61"] = {"class_type": "GetVideoComponents", "inputs": {"video": ["60", 0]}}
-                    wf["8"]["inputs"]["ref_videos.ref_video_0"] = ["61", 0]
-                    wf["8"]["inputs"]["ref_video_audios.ref_video_audio_0"] = ["61", 1]
+                    frames = round(seconds * H3_FPS)
+                    wf = build_relay_swap(vname, iname, relay_swap_prompt(body.get("description") or ""),
+                                          seed=seed, seconds=seconds, resolution="768",
+                                          selection=(body.get("selection") or "largest"),
+                                          prefix="video/BacklotSwap")
                     t0 = time.time()
-                    blob, ext, staged = submit_and_wait(wf, timeout=3600)
+                    blob, ext, staged = submit_and_wait(wf, timeout=7200)
                     name, path = save_output(blob, kind="swap", ext=ext, staged=staged)
                     for nm in (vname, iname):
                         try:

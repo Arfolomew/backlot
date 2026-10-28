@@ -365,6 +365,7 @@ def _idle_watchdog():
 # 7-minute H3 render survive a reverse proxy's request timeout or a page reload.
 JOBS = {}                      # id -> {"state", "path", "t0", "code", "body", "ctype", "t1"}
 JOBS_LOCK = __import__("threading").Lock()
+SONG_NAME_LOCK = __import__("threading").Lock()   # song stems are claimed under this (queued takes)
 JOB_PATHS = {"/api/video", "/api/image", "/api/audio", "/api/vertical", "/api/image-upscale",
              "/api/upscale", "/api/slowmo"}
 JOB_KEEP_SEC = 3600            # finished jobs stay fetchable this long
@@ -1298,9 +1299,17 @@ class H(BaseHTTPRequestHandler):
                 title = re.sub(r"\s+", " ", str(body.get("title") or "")).strip()[:80]
                 if title:
                     slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-") or "song"
-                    name, i = f"{slug}.mp3", 2
-                    while os.path.exists(os.path.join(AUDIO_DIR, name)):
-                        name, i = f"{slug}-{i}.mp3", i + 1
+                    # Oct 28 2026: takes can queue, so several land under one title. A mastered take is
+                    # saved as <stem>.flac + <stem>-master.mp3 (never <stem>.mp3), so check every file a
+                    # take writes, and claim the stem with a placeholder under a lock so two jobs that
+                    # finish together can't pick the same one.
+                    with SONG_NAME_LOCK:
+                        stem, i = slug, 2
+                        while any(os.path.exists(os.path.join(AUDIO_DIR, stem + x))
+                                  for x in (".mp3", ".flac", "-master.mp3", "-master.flac")):
+                            stem, i = f"{slug}-{i}", i + 1
+                        open(os.path.join(AUDIO_DIR, stem + ".flac"), "ab").close()
+                    name = f"{stem}.mp3"
                     label = title
                 else:
                     name = f"{engine}_{time.strftime('%Y-%m-%d_%H%M%S')}.mp3"
@@ -1314,6 +1323,9 @@ class H(BaseHTTPRequestHandler):
                         score, mastered = rep_.get("score"), True
                 if not mastered:
                     wav_to_mp3(blob, path, title=title or None)
+                    ph = path[:-4] + ".flac"            # drop the name placeholder if mastering never filled it
+                    if title and os.path.exists(ph) and os.path.getsize(ph) == 0:
+                        os.remove(ph)
                 return self._send(200, json.dumps({
                     "url": f"/audio/{name}", "file": path, "seed": seed, "seconds": seconds, "engine": engine,
                     "title": title, "label": label[:80], "took": round(time.time() - t0, 1),

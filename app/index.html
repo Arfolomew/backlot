@@ -113,6 +113,15 @@
   .agrid figcaption{ font-size:11px; color:var(--muted); margin-top:5px; }
   .agrid .pending{ aspect-ratio:2/3; border:1px dashed var(--line2); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--muted); text-align:center; padding:6px; }
   .auchips{ display:flex; flex-wrap:wrap; gap:6px; }
+  textarea.austyle{ min-height:52px; }
+  .auqueue{ display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+  .auqueue .aujob{ display:flex; justify-content:space-between; gap:8px; padding:7px 10px; border-radius:8px; background:rgba(255,255,255,.05); font-size:12px; }
+  .auqueue .aujob.done{ cursor:pointer; background:rgba(120,200,140,.12); }
+  .auqueue .aujob.failed{ background:rgba(220,90,90,.14); }
+  .auqueue .aujob{ flex-wrap:wrap; }
+  .auqueue .aujob .st{ opacity:.8; white-space:nowrap; }
+  .auqueue .aujob .bar{ flex-basis:100%; height:4px; border-radius:2px; background:rgba(255,255,255,.08); overflow:hidden; }
+  .auqueue .aujob .bar i{ display:block; height:100%; width:0; background:#e8b86a; transition:width .6s; }
   .auchips .ratio{ padding:6px 10px; font-size:12px; flex:none; }
   .audiobox{ display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%; gap:14px; }
   .audiobox audio{ width:70%; }
@@ -422,7 +431,7 @@
         <input type="text" id="autitle" placeholder="Harbor Lights" maxlength="80">
         <div class="hint">Names the file and the track tag. Leave blank for a timestamped name.</div>
         <label>Style</label>
-        <input type="text" id="austyle" placeholder="pop, upbeat, female vocal, bright synths, 120 bpm">
+        <textarea id="austyle" class="austyle" rows="2" placeholder="pop, upbeat, female vocal, bright synths, 120 bpm"></textarea>
         <label>Lyrics</label>
         <textarea id="aulyrics" placeholder="[verse]&#10;Morning light on the harbor wall&#10;[chorus]&#10;We sail on, we sail on"></textarea>
         <div class="hint">Section tags like [verse], [chorus], [bridge] steer the structure. For an instrumental, pick the Instrumental flavor and give section tags only.</div>
@@ -447,8 +456,14 @@
       <div class="slider-row"><input type="range" id="aulen" min="10" max="240" step="5" value="60"></div>
       <label>Seed (-1 = random)</label>
       <input type="number" id="auseed" value="-1">
+      <label>Takes <span class="hint" style="text-transform:none">(each one queues and renders in turn)</span></label>
+      <div class="ratios" id="autakes">
+        <div class="ratio active" data-n="1">1</div><div class="ratio" data-n="2">2</div>
+        <div class="ratio" data-n="3">3</div><div class="ratio" data-n="4">4</div>
+      </div>
       <button class="gen" id="augen">Generate Audio</button>
       <div class="err" id="auerr"></div>
+      <div class="auqueue" id="auqueue"></div>
      </div><!-- /audio-panel -->
 
      <div id="cinema-panel" style="display:none; flex-direction:column; flex:1; min-height:0">
@@ -1393,13 +1408,94 @@ $('#auloras').addEventListener('click', e => {
   const folk = [...document.querySelectorAll('#auloras .ratio.active')].some(x => x.dataset.file.startsWith('trbdr_'));
   $('#aulorahint').textContent = folk ? '60s folk: the style line is optional (a built-in folk style is used when blank, and the trigger word is added for you). Pick the Full plan. Male voice, often in 3/4.' : '';
 });
-$('#augen').addEventListener('click', async () => {
+// Oct 28 2026 (Jake): takes queue up like Audio Studio did. Each take is its own server job
+// (X-Backlot-Async); ComfyUI renders them one after another. No global busy lock, so you can
+// keep clicking Generate, change the style between clicks, and play any finished take from the list.
+// Each row has its own bar; the take that is rendering also drives the big bar in the viewer
+// (unless you are listening to something). Job ids live in localStorage so the list survives a reload.
+let AUN = 0;
+const AUSAVE = 'backlot.aujobs';
+function auSaved(){ try{ return JSON.parse(localStorage.getItem(AUSAVE) || '[]'); }catch(e){ return []; } }
+function auSave(list){ localStorage.setItem(AUSAVE, JSON.stringify(list.slice(0, 20))); }
+function auRow(job){
+  const st = job.state === 'done' ? '&#9654; play · ' + job.meta : job.state === 'failed' ? 'failed: ' + job.err : job.st;
+  job.el.className = 'aujob ' + job.state;
+  job.el.innerHTML = '<span>' + job.label + '</span><span class="st">' + st + '</span>'
+    + (job.state === 'running' ? '<div class="bar"><i style="width:' + (job.pct || 0) + '%"></i></div>' : '');
+}
+function auViewerFree(){
+  const a = document.querySelector('#viewer audio');
+  return !a || a.paused || a.ended;
+}
+function auViewerBar(job){
+  if(!auViewerFree() && !document.querySelector('#viewer .auprog')) return;
+  if(!document.querySelector('#viewer .auprog')){
+    $('#viewer').innerHTML = '<div class="placeholder auprog"><div class="spinner"></div><div class="aumsg"></div>'
+      + '<div class="pbar"><div class="pfill"></div></div><div class="ptext"></div></div>';
+  }
+  $('#viewer .aumsg').textContent = job.label + ': writing and singing on YuE2…';
+  $('#viewer .pfill').style.width = (job.pct || 0) + '%';
+  $('#viewer .ptext').textContent = job.st;
+}
+async function auPoll(job, jid, body, song){
+  let r;
+  for(;;){
+    await sleep(1500);
+    try{ r = await fetch('/api/jobs/' + jid); }catch(e){ continue; }
+    if(r.status !== 202) break;
+    try{
+      const d = await r.json(), pr = d.progress || {};
+      if(pr.queue){ const ahead = Math.max(0, pr.queue - 1); job.st = ahead ? 'waiting, ' + ahead + ' ahead' : 'next up'; job.pct = 0; }
+      else if(pr.steps){ job.pct = Math.round(100 * (pr.step || 0) / pr.steps); job.st = 'rendering ' + job.pct + '%' + (pr.nodes_total > 1 && pr.nodes_done ? ' (finishing)' : ''); }
+      else { job.st = 'rendering… ' + (d.elapsed ? Math.round(d.elapsed) + ' s' : ''); }
+      auRow(job);
+      if(!pr.queue) auViewerBar(job);
+    }catch(e){}
+  }
+  return r;
+}
+async function auRun(body, song, resume){
+  const job = {n: ++AUN, state: 'running', st: 'sending…', pct: 0, el: document.createElement('div')};
+  job.label = '#' + job.n + ' ' + (song ? (body.title || 'Song') : 'Sound FX');
+  $('#auqueue').prepend(job.el); auRow(job);
+  let jid = resume;
+  try{
+    let r;
+    if(!jid){
+      const r0 = await fetch('/api/audio', {method:'POST', headers:{'Content-Type':'application/json', 'X-Backlot-Async':'1'}, body: JSON.stringify(body)});
+      r = r0;
+      if(r0.status === 202){ jid = (await r0.json()).job; auSave([{jid, body, song}, ...auSaved()]); }
+    }
+    if(jid) r = await auPoll(job, jid, body, song);
+    if(r.status === 404) throw new Error('lost (the server restarted); the file may still be in the gallery');
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || 'generation failed');
+    job.state = 'done';
+    job.meta = d.seconds + ' s · seed ' + d.seed + (d.score && d.score.overall != null ? ' · quality ' + (+d.score.overall).toFixed(1) : '');
+    const show = () => showAudio(d.url + '?t=' + Date.now(), (d.title ? d.title + ' · ' : '') + d.seconds + ' s · seed ' + d.seed + ' · ' + d.took + 's · ' + (song ? 'YuE2' + (d.mastered ? ' · mastered' : '') : 'Stable Audio 3'), song ? {lyrics: body.lyrics, score: d.score} : null);
+    job.el.onclick = show;
+    if(auViewerFree()) show();   // never cut off a take you are listening to
+    loadGallery();
+  }catch(e){
+    job.state = 'failed'; job.err = e.message;
+    if(document.querySelector('#viewer .auprog')) $('#viewer').innerHTML = '<div class="placeholder">That take did not finish.</div>';
+  }
+  if(jid) auSave(auSaved().filter(x => x.jid !== jid));
+  auRow(job);
+}
+addEventListener('load', () => { auSaved().reverse().forEach(x => auRun(x.body, x.song, x.jid)); });
+$('#autakes').addEventListener('click', e => {
+  const b = e.target.closest('.ratio'); if(!b) return;
+  document.querySelectorAll('#autakes .ratio').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+});
+$('#augen').addEventListener('click', () => {
   $('#auerr').textContent = '';
   const song = AENGINE === 'song';
   const body = { engine: AENGINE, mode: AENGINE, seconds: +$('#aulen').value, seed: parseInt($('#auseed').value || '-1') };
   if(song){
     body.title = $('#autitle').value.trim();
-    body.style = $('#austyle').value.trim(); body.lyrics = $('#aulyrics').value.trim();
+    body.style = $('#austyle').value.replace(/\s*\n\s*/g, ' ').trim(); body.lyrics = $('#aulyrics').value.trim();
     body.plan = document.querySelector('#auplan .ratio.active').dataset.plan;
     body.loras = [...document.querySelectorAll('#auloras .ratio.active')].map(x => ({file: x.dataset.file}));
     body.prompt = body.style;
@@ -1409,17 +1505,9 @@ $('#augen').addEventListener('click', async () => {
     body.prompt = $('#auprompt').value.trim();
     if(!body.prompt){ $('#auerr').textContent = 'Describe the sound first.'; return; }
   }
-  setBusy(true, song ? 'writing and singing on YuE2… about ' + Math.round(body.seconds / 2) + ' s' : 'rendering on Stable Audio 3… about ' + Math.max(3, body.seconds) + ' s');
-  try{
-    const r = await fetch('/api/audio', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
-    const d = await r.json();
-    if(!r.ok) throw new Error(d.error || 'generation failed');
-    showAudio(d.url + '?t=' + Date.now(), (d.title ? d.title + ' · ' : '') + d.seconds + ' s · seed ' + d.seed + ' · ' + d.took + 's · ' + (song ? 'YuE2' + (d.mastered ? ' · mastered' : '') : 'Stable Audio 3'), song ? {lyrics: body.lyrics, score: d.score} : null);
-    loadGallery();
-  }catch(e){
-    $('#auerr').textContent = e.message;
-    $('#viewer').innerHTML = '<div class="placeholder">That run did not finish.</div>';
-  }finally{ setBusy(false); }
+  const n = +document.querySelector('#autakes .ratio.active').dataset.n;
+  // seed -1 = a new random seed per take; a fixed seed steps up by one per take so takes still differ
+  for(let i = 0; i < n; i++) auRun(Object.assign({}, body, body.seed >= 0 ? {seed: body.seed + i} : {}), song);
 });
 paintAudio();
 

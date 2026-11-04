@@ -221,7 +221,10 @@ def _pick(group, key):
     return items[0]
 
 def _mmss(t):
-    return "%02d:%06.3f" % (int(t // 60), t % 60)
+    # Round to milliseconds FIRST, then split: flooring minutes from the raw value
+    # loses the carry when the seconds part rounds up (59.9996 -> "00:60.000").
+    ms = int(round(t * 1000))
+    return "%02d:%06.3f" % (ms // 60000, (ms % 60000) / 1000.0)
 
 def compose_cinema_prompt(o):
     """o: {scene, shots?, genre, era, light, camera, lens, aperture, pacing, seconds}.
